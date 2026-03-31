@@ -4,7 +4,10 @@
 
 .DESCRIPTION
     Idempotent utility that installs and configures: Chocolatey, VS Code, Python,
-    Oh My Posh, Hack Nerd Font, SSH keys, Windows Terminal font, and Python tools.
+    Oh My Posh, GitHub CLI, fzf + PSFzf, Hack Nerd Font, SSH keys (with GitHub
+    upload), Windows Terminal font, Python tools, delta, lazygit, pyenv-win,
+    global gitignore, git commit signing, and git identity check.
+    Optional: VS Code settings, extensions, PowerShell profile, Defender exclusions.
     Optional steps (VS Code settings, extensions, PowerShell profile) are skipped by
     default since they are normally handled by VS Code Settings Sync and OneDrive.
 
@@ -15,6 +18,10 @@
 .PARAMETER ScaffoldPyproject
     Path to a project directory where a pyproject.toml template should be created.
     When provided, the script only scaffolds the file and exits.
+
+.PARAMETER CheckProfileOnly
+    Run only the profile health check and exit. Useful for verifying your profile
+    has all expected sections without running the full setup.
 
 .EXAMPLE
     .\Setup-DevEnvironment.ps1
@@ -32,40 +39,29 @@
 [CmdletBinding()]
 param(
     [switch]$IncludeOptional,
+    [switch]$CheckProfileOnly,
+    [ValidateNotNullOrEmpty()]
     [string]$ScaffoldPyproject
 )
 
 Set-StrictMode -Version Latest
-$ErrorActionPreference = 'Stop'
+. "$PSScriptRoot\Helpers.ps1"
 
-$TotalSteps = if ($IncludeOptional) { 11 } else { 8 }
+# Must match the number of Write-Step calls in core/optional functions respectively.
+# Update CoreSteps and OptionalSteps if functions are added or removed.
+# Current count: Test-ProfileHealth(1) + 17 install/config functions = 18 core,
+#                4 optional (VSCodeSettings, VSCodeExtensions, Profile, Defender).
+$CoreSteps = 18
+$OptionalSteps = 4
+$TotalSteps = if ($IncludeOptional) { $CoreSteps + $OptionalSteps } else { $CoreSteps }
 $script:CurrentStep = 0
 
-# =============================================================================
-# Helper Functions
-# =============================================================================
-
-function Update-SessionPath {
-    $machinePath = [System.Environment]::GetEnvironmentVariable("PATH", "Machine")
-    $userPath = [System.Environment]::GetEnvironmentVariable("PATH", "User")
-    $env:PATH = "$machinePath;$userPath"
-}
-
-function Write-Step ($Name) {
-    $script:CurrentStep++
-    Write-Host "`n[$script:CurrentStep/$TotalSteps] $Name" -ForegroundColor Cyan
-}
-
-function Write-Skip ($Message) {
-    Write-Host "  $Message" -ForegroundColor DarkGray
-}
-
-function Write-Change ($Message) {
-    Write-Host "  $Message" -ForegroundColor Green
-}
-
-function Write-Issue ($Message) {
-    Write-Host "  $Message" -ForegroundColor Red
+function Assert-Winget {
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+        Write-Issue "winget not found. Install App Installer from the Microsoft Store or update Windows."
+        return $false
+    }
+    return $true
 }
 
 # =============================================================================
@@ -77,35 +73,46 @@ function Assert-Administrator {
     $principal = [Security.Principal.WindowsPrincipal]$identity
     if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
         Write-Issue "This script must be run as Administrator. Right-click PowerShell and select 'Run as Administrator'."
-        exit 1
+        throw "This script must be run as Administrator."
     }
 }
 
 function Install-Chocolatey {
     Write-Step "Chocolatey"
     if (Get-Command choco -ErrorAction SilentlyContinue) {
-        Write-Skip "Chocolatey is already installed"
+        Write-Verbose "Skipping Chocolatey -- already installed at $((Get-Command choco).Source)"
+        Write-Skip "Chocolatey is already installed" -Track "Chocolatey"
         return
     }
-    Set-ExecutionPolicy Bypass -Scope Process -Force
-    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-    Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
-    Update-SessionPath
-    Write-Change "Chocolatey installed"
+    try {
+        Set-ExecutionPolicy Bypass -Scope Process -Force
+        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+        Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+        Update-SessionPath
+        Write-Change "Chocolatey installed" -Track "Chocolatey"
+    } catch {
+        Write-Issue "Chocolatey install failed: $($_.Exception.Message)" -Track "Chocolatey"
+    }
 }
 
 function Install-VSCode {
     Write-Step "VS Code"
     if (Get-Command code -ErrorAction SilentlyContinue) {
-        Write-Skip "VS Code is already installed"
+        Write-Verbose "Skipping VS Code -- already installed at $((Get-Command code).Source)"
+        Write-Skip "VS Code is already installed" -Track "VS Code"
         return
     }
-    choco install vscode -y
-    Update-SessionPath
-    if (-not (Get-Command code -ErrorAction SilentlyContinue)) {
-        Write-Host "  VS Code installed but 'code' not found on PATH. You may need to restart your terminal." -ForegroundColor Yellow
-    } else {
-        Write-Change "VS Code installed"
+    try {
+        choco install vscode -y
+        if ($LASTEXITCODE -ne 0) { Write-Issue "VS Code install failed (choco exit code: $LASTEXITCODE)" -Track "VS Code"; return }
+        Update-SessionPath
+        if (-not (Get-Command code -ErrorAction SilentlyContinue)) {
+            Write-Host "  VS Code installed but 'code' not found on PATH. You may need to restart your terminal." -ForegroundColor Yellow
+        } else {
+            Write-Change "VS Code installed" -Track "VS Code"
+        }
+    } catch {
+        Write-Issue "VS Code install failed: $($_.Exception.Message)" -Track "VS Code"
     }
 }
 
@@ -114,27 +121,149 @@ function Install-Python {
     $pythonCmd = Get-Command python -ErrorAction SilentlyContinue
     $isStoreStub = $pythonCmd -and $pythonCmd.Source -like "*WindowsApps*"
     if ($pythonCmd -and -not $isStoreStub) {
-        Write-Skip "Python is already installed"
+        Write-Verbose "Skipping Python -- already installed at $($pythonCmd.Source)"
+        Write-Skip "Python is already installed" -Track "Python"
         return
     }
-    choco install python -y
-    Update-SessionPath
-    if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
-        Write-Host "  Python installed but 'python' not found on PATH. You may need to restart your terminal." -ForegroundColor Yellow
-    } else {
-        Write-Change "Python installed"
+    try {
+        choco install python -y
+        if ($LASTEXITCODE -ne 0) { Write-Issue "Python install failed (choco exit code: $LASTEXITCODE)" -Track "Python"; return }
+        Update-SessionPath
+        if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
+            Write-Host "  Python installed but 'python' not found on PATH. You may need to restart your terminal." -ForegroundColor Yellow
+        } else {
+            Write-Change "Python installed" -Track "Python"
+        }
+    } catch {
+        Write-Issue "Python install failed: $($_.Exception.Message)" -Track "Python"
     }
 }
 
 function Install-OhMyPosh {
     Write-Step "Oh My Posh"
     if (Get-Command oh-my-posh -ErrorAction SilentlyContinue) {
-        Write-Skip "Oh My Posh is already installed"
+        Write-Verbose "Skipping Oh My Posh -- already installed at $((Get-Command oh-my-posh).Source)"
+        Write-Skip "Oh My Posh is already installed" -Track "Oh My Posh"
         return
     }
-    winget install JanDeDobbeleer.OhMyPosh --silent --accept-package-agreements --accept-source-agreements
-    Update-SessionPath
-    Write-Change "Oh My Posh installed"
+    if (-not (Assert-Winget)) { return }
+    try {
+        winget install JanDeDobbeleer.OhMyPosh --silent --accept-package-agreements --accept-source-agreements
+        if ($LASTEXITCODE -ne 0) { Write-Issue "Oh My Posh install failed (winget exit code: $LASTEXITCODE)" -Track "Oh My Posh"; return }
+        Update-SessionPath
+        Write-Change "Oh My Posh installed" -Track "Oh My Posh"
+    } catch {
+        Write-Issue "Oh My Posh install failed: $($_.Exception.Message)" -Track "Oh My Posh"
+    }
+}
+
+function Install-GitHubCLI {
+    Write-Step "GitHub CLI"
+    if (Get-Command gh -ErrorAction SilentlyContinue) {
+        Write-Verbose "Skipping GitHub CLI -- already installed at $((Get-Command gh).Source)"
+        Write-Skip "GitHub CLI is already installed" -Track "GitHub CLI"
+        return
+    }
+    if (-not (Assert-Winget)) { return }
+    try {
+        winget install GitHub.cli --silent --accept-package-agreements --accept-source-agreements
+        if ($LASTEXITCODE -ne 0) { Write-Issue "GitHub CLI install failed (winget exit code: $LASTEXITCODE)" -Track "GitHub CLI"; return }
+        Update-SessionPath
+        if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
+            Write-Host "  GitHub CLI installed but 'gh' not found on PATH. You may need to restart your terminal." -ForegroundColor Yellow
+        } else {
+            Write-Change "GitHub CLI installed" -Track "GitHub CLI"
+        }
+    } catch {
+        Write-Issue "GitHub CLI install failed: $($_.Exception.Message)" -Track "GitHub CLI"
+    }
+}
+
+function Install-Fzf {
+    Write-Step "fzf + fd + PSFzf"
+
+    # Install fzf binary via winget
+    if (Get-Command fzf -ErrorAction SilentlyContinue) {
+        Write-Verbose "Skipping fzf -- already installed at $((Get-Command fzf).Source)"
+        Write-Skip "fzf is already installed" -Track "fzf"
+    } else {
+        if (-not (Assert-Winget)) { return }
+        try {
+            winget install junegunn.fzf --silent --accept-package-agreements --accept-source-agreements
+            if ($LASTEXITCODE -ne 0) { Write-Issue "fzf install failed (winget exit code: $LASTEXITCODE)" -Track "fzf"; return }
+            Update-SessionPath
+            if (-not (Get-Command fzf -ErrorAction SilentlyContinue)) {
+                Write-Host "  fzf installed but not found on PATH. You may need to restart your terminal." -ForegroundColor Yellow
+            } else {
+                Write-Change "fzf installed" -Track "fzf"
+            }
+        } catch {
+            Write-Issue "fzf install failed: $($_.Exception.Message)" -Track "fzf"
+        }
+    }
+
+    # Install fd via Chocolatey
+    if (Get-Command fd -ErrorAction SilentlyContinue) {
+        Write-Verbose "Skipping fd -- already installed at $((Get-Command fd).Source)"
+        Write-Skip "fd is already installed" -Track "fd"
+    } else {
+        try {
+            choco install fd -y
+            if ($LASTEXITCODE -ne 0) { Write-Issue "fd install failed (choco exit code: $LASTEXITCODE)" -Track "fd"; return }
+            Update-SessionPath
+            if (-not (Get-Command fd -ErrorAction SilentlyContinue)) {
+                Write-Host "  fd installed but not found on PATH. You may need to restart your terminal." -ForegroundColor Yellow
+            } else {
+                Write-Change "fd installed" -Track "fd"
+            }
+        } catch {
+            Write-Issue "fd install failed: $($_.Exception.Message)" -Track "fd"
+        }
+    }
+
+    # Install PSFzf PowerShell module
+    if (Get-Module -ListAvailable -Name PSFzf) {
+        Write-Skip "PSFzf module is already installed" -Track "PSFzf"
+    } else {
+        try {
+            Install-Module -Name PSFzf -Scope CurrentUser -Force -ErrorAction Stop
+            Write-Change "PSFzf module installed" -Track "PSFzf"
+        } catch {
+            Write-Issue "PSFzf install failed: $($_.Exception.Message)" -Track "PSFzf"
+        }
+    }
+}
+
+function Install-CLITools {
+    Write-Step "CLI Tools (zoxide, bat, ripgrep, delta, lazygit)"
+
+    $tools = @(
+        @{ Name = "zoxide"; Command = "zoxide"; Package = "zoxide" }
+        @{ Name = "bat"; Command = "bat"; Package = "bat" }
+        @{ Name = "ripgrep"; Command = "rg"; Package = "ripgrep" }
+        @{ Name = "delta"; Command = "delta"; Package = "delta" }
+        @{ Name = "lazygit"; Command = "lazygit"; Package = "lazygit" }
+    )
+
+    foreach ($tool in $tools) {
+        if (Get-Command $tool.Command -ErrorAction SilentlyContinue) {
+            Write-Verbose "Skipping $($tool.Name) -- already installed at $((Get-Command $tool.Command).Source)"
+            Write-Skip "$($tool.Name) is already installed" -Track $tool.Name
+        } else {
+            try {
+                choco install $tool.Package -y
+                if ($LASTEXITCODE -ne 0) { Write-Issue "$($tool.Name) install failed (choco exit code: $LASTEXITCODE)" -Track $tool.Name; continue }
+                Update-SessionPath
+                if (-not (Get-Command $tool.Command -ErrorAction SilentlyContinue)) {
+                    Write-Host "  $($tool.Name) installed but not found on PATH. You may need to restart your terminal." -ForegroundColor Yellow
+                } else {
+                    Write-Change "$($tool.Name) installed" -Track $tool.Name
+                }
+            } catch {
+                Write-Issue "$($tool.Name) install failed: $($_.Exception.Message)" -Track $tool.Name
+            }
+        }
+    }
 }
 
 function Install-HackNerdFont {
@@ -142,27 +271,32 @@ function Install-HackNerdFont {
     $fontsPath = "C:\Windows\Fonts"
     $alreadyInstalled = Get-ChildItem $fontsPath | Where-Object { $_.Name -like "Hack*" }
     if ($alreadyInstalled) {
-        Write-Skip "Hack Nerd Font is already installed"
+        Write-Verbose "Skipping Hack Nerd Font -- already installed in $fontsPath"
+        Write-Skip "Hack Nerd Font is already installed" -Track "Hack Nerd Font"
         return
     }
 
     $zipPath = Join-Path $PSScriptRoot "Hack.zip"
     if (-not (Test-Path $zipPath)) {
-        Write-Issue "Hack.zip not found in $PSScriptRoot"
+        Write-Issue "Hack.zip not found in $PSScriptRoot" -Track "Hack Nerd Font"
         return
     }
 
-    $extractPath = Join-Path $env:TEMP "HackFont"
-    Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
-    $fonts = Get-ChildItem $extractPath -Recurse -Filter "*.ttf"
-    foreach ($font in $fonts) {
-        Copy-Item $font.FullName $fontsPath
-        $regKey = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"
-        $fontDisplayName = $font.BaseName + " (TrueType)"
-        Set-ItemProperty -Path $regKey -Name $fontDisplayName -Value $font.Name
+    try {
+        $extractPath = Join-Path $env:TEMP "HackFont"
+        Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
+        $fonts = Get-ChildItem $extractPath -Recurse -Filter "*.ttf"
+        foreach ($font in $fonts) {
+            Copy-Item $font.FullName $fontsPath
+            $regKey = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"
+            $fontDisplayName = $font.BaseName + " (TrueType)"
+            Set-ItemProperty -Path $regKey -Name $fontDisplayName -Value $font.Name
+        }
+        Remove-Item $extractPath -Recurse -Force
+        Write-Change "Hack Nerd Font installed ($($fonts.Count) files)" -Track "Hack Nerd Font"
+    } catch {
+        Write-Issue "Hack Nerd Font install failed: $($_.Exception.Message)" -Track "Hack Nerd Font"
     }
-    Remove-Item $extractPath -Recurse -Force
-    Write-Change "Hack Nerd Font installed ($($fonts.Count) files)"
 }
 
 function Install-SSHKeys {
@@ -171,28 +305,97 @@ function Install-SSHKeys {
     $keyPath = Join-Path $sshDir "id_ed25519"
 
     if (Test-Path $keyPath) {
-        Write-Skip "SSH keys already present"
+        Write-Verbose "Skipping SSH keys -- $keyPath already exists"
+        Write-Skip "SSH keys already present" -Track "SSH Keys"
         return
     }
 
     $zipPath = Join-Path $PSScriptRoot ".ssh.zip"
     if (-not (Test-Path $zipPath)) {
-        Write-Issue ".ssh.zip not found in $PSScriptRoot"
+        Write-Issue ".ssh.zip not found in $PSScriptRoot" -Track "SSH Keys"
         return
     }
 
-    if (-not (Test-Path $sshDir)) { New-Item -ItemType Directory -Path $sshDir | Out-Null }
-    Expand-Archive -Path $zipPath -DestinationPath $sshDir -Force
+    try {
+        if (-not (Test-Path $sshDir)) { New-Item -ItemType Directory -Path $sshDir | Out-Null }
+        Expand-Archive -Path $zipPath -DestinationPath $sshDir -Force
 
-    # Set correct permissions on private key (owner-only access)
-    $acl = Get-Acl $keyPath
-    $acl.SetAccessRuleProtection($true, $false)
-    $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
-        $env:USERNAME, "FullControl", "Allow"
-    )
-    $acl.SetAccessRule($rule)
-    Set-Acl $keyPath $acl
-    Write-Change "SSH keys deployed and permissions set"
+        if (-not (Test-Path $keyPath)) {
+            Write-Issue "SSH key not found at $keyPath after extraction -- check that .ssh.zip contains id_ed25519 at its root, not inside a subdirectory" -Track "SSH Keys"
+            return
+        }
+
+        # Set correct permissions on private key (owner-only access)
+        $acl = Get-Acl $keyPath
+        $acl.SetAccessRuleProtection($true, $false)
+        $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
+            $env:USERNAME, "FullControl", "Allow"
+        )
+        $acl.SetAccessRule($rule)
+        Set-Acl $keyPath $acl
+        Write-Change "SSH keys deployed and permissions set" -Track "SSH Keys"
+    } catch {
+        Write-Issue "SSH keys install failed: $($_.Exception.Message)" -Track "SSH Keys"
+    }
+}
+
+function Add-GitHubSSHKey {
+    Write-Step "GitHub SSH Key Upload"
+
+    if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
+        Write-Skip "GitHub CLI not found -- skipping SSH key upload" -Track "GitHub SSH Key"
+        return
+    }
+
+    $keyPath = Join-Path $env:USERPROFILE ".ssh\id_ed25519.pub"
+    if (-not (Test-Path $keyPath)) {
+        Write-Skip "SSH public key not found at $keyPath -- skipping" -Track "GitHub SSH Key"
+        return
+    }
+
+    # Check if already authenticated with gh
+    $null = gh auth status 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  GitHub CLI is not authenticated." -ForegroundColor Yellow
+        Write-Host "  Run 'gh auth login' then re-run this script to upload your SSH key automatically." -ForegroundColor Yellow
+        return
+    }
+
+    # Check if key is already uploaded
+    $keyContent = Get-Content $keyPath
+    $keyFragment = ($keyContent -split " ")[1].Substring(0, 20)
+    $existingKeys = gh api user/keys --paginate 2>&1
+    $existingSigningKeys = gh api user/ssh_signing_keys --paginate 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        # API call failed -- likely missing scopes. Check with gh ssh-key list as fallback.
+        $existingKeys = gh ssh-key list 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "  Cannot check existing SSH keys (missing API scopes)." -ForegroundColor Yellow
+            Write-Host "  Run 'gh auth refresh -h github.com -s admin:public_key,admin:ssh_signing_key' then re-run." -ForegroundColor Yellow
+            return
+        }
+    }
+    $allKeys = "$existingKeys $existingSigningKeys"
+    if ($allKeys -match [regex]::Escape($keyFragment)) {
+        Write-Verbose "Skipping SSH key upload -- key already on GitHub"
+        Write-Skip "SSH key is already uploaded to GitHub" -Track "GitHub SSH Key"
+        return
+    }
+
+    $hostname = $env:COMPUTERNAME
+    $date = Get-Date -Format 'yyyy-MM-dd'
+
+    $null = gh ssh-key add $keyPath --title "$hostname - $date" --type authentication 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Issue "Failed to upload authentication key to GitHub" -Track "GitHub SSH Key"
+        return
+    }
+    $null = gh ssh-key add $keyPath --title "$hostname - $date (signing)" --type signing 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Issue "Failed to upload signing key to GitHub" -Track "GitHub SSH Key"
+        return
+    }
+    Write-Change "SSH key uploaded to GitHub (authentication + signing)" -Track "GitHub SSH Key"
 }
 
 function Set-WindowsTerminalFont {
@@ -200,10 +403,12 @@ function Set-WindowsTerminalFont {
     $wtSettingsPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
 
     if (-not (Test-Path $wtSettingsPath)) {
-        Write-Skip "Windows Terminal settings not found -- skipping"
+        Write-Verbose "Skipping Windows Terminal font -- settings file not found at $wtSettingsPath"
+        Write-Skip "Windows Terminal settings not found -- skipping" -Track "WT Font"
         return
     }
 
+    try {
     $wtSettings = Get-Content $wtSettingsPath -Raw | ConvertFrom-Json
 
     # Check if already set
@@ -212,7 +417,7 @@ function Set-WindowsTerminalFont {
         $currentFont = $wtSettings.profiles.defaults.font.face
     }
     if ($currentFont -eq "Hack Nerd Font") {
-        Write-Skip "Windows Terminal font is already set to Hack Nerd Font"
+        Write-Skip "Windows Terminal font is already set to Hack Nerd Font" -Track "WT Font"
         return
     }
 
@@ -225,38 +430,45 @@ function Set-WindowsTerminalFont {
         $wtSettings.profiles.defaults.font.face = "Hack Nerd Font"
     }
     $wtSettings | ConvertTo-Json -Depth 10 | Set-Content $wtSettingsPath -Encoding UTF8
-    Write-Change "Windows Terminal font set to Hack Nerd Font"
+    Write-Change "Windows Terminal font set to Hack Nerd Font" -Track "WT Font"
+    } catch {
+        Write-Issue "Windows Terminal font config failed: $($_.Exception.Message)" -Track "WT Font"
+    }
 }
 
 function Install-PythonTools {
     Write-Step "Python Tools (pipx)"
 
-    $tools = @("pylint", "black", "mypy", "ruff", "bandit")
+    $tools = @("pylint", "mypy", "ruff", "bandit", "pre-commit", "cookiecutter")
 
     # Check Python is available
     $pythonCmd = Get-Command python -ErrorAction SilentlyContinue
     if (-not $pythonCmd -or $pythonCmd.Source -like "*WindowsApps*") {
-        Write-Issue "Python not found. Skipping Python tools."
+        Write-Issue "Python not found. Skipping Python tools." -Track "Python Tools"
         return
     }
 
     # Check pip is available
     if (-not (Get-Command pip -ErrorAction SilentlyContinue)) {
-        Write-Issue "pip not found. Run 'python -m ensurepip' to install it."
+        Write-Issue "pip not found. Run 'python -m ensurepip' to install it." -Track "Python Tools"
         return
     }
 
     # Check pipx, install if missing
     if (-not (Get-Command pipx -ErrorAction SilentlyContinue)) {
-        pip install --user pipx 2>&1 | Out-Null
-        $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "User") + ";" + $env:PATH
-        if (-not (Get-Command pipx -ErrorAction SilentlyContinue)) {
-            Write-Issue "pipx installed but not on PATH. Run 'pipx ensurepath', restart your terminal, and re-run."
+        $null = pip install --user pipx 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Issue "pip install pipx failed. Check your Python/pip installation." -Track "pipx"
             return
         }
-        Write-Change "pipx installed"
+        $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "User") + ";" + $env:PATH
+        if (-not (Get-Command pipx -ErrorAction SilentlyContinue)) {
+            Write-Issue "pipx installed but not on PATH. Run 'pipx ensurepath', restart your terminal, and re-run." -Track "pipx"
+            return
+        }
+        Write-Change "pipx installed" -Track "pipx"
     } else {
-        Write-Skip "pipx is already installed"
+        Write-Skip "pipx is already installed" -Track "pipx"
     }
 
     # Install missing tools
@@ -264,13 +476,13 @@ function Install-PythonTools {
 
     foreach ($tool in $tools) {
         if ($installedPackages -contains $tool.ToLower()) {
-            Write-Skip "$tool is already installed"
+            Write-Skip "$tool is already installed" -Track $tool
         } else {
-            try {
-                pipx install $tool 2>&1 | Out-Null
-                Write-Change "$tool installed"
-            } catch {
-                Write-Issue "$tool failed to install -- $($_.Exception.Message)"
+            $result = pipx install $tool 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                Write-Issue "$tool failed to install: $($result | Select-Object -Last 3 | Out-String)" -Track $tool
+            } else {
+                Write-Change "$tool installed" -Track $tool
             }
         }
     }
@@ -282,246 +494,193 @@ function Install-PythonTools {
     }
 }
 
+function Install-PyenvWin {
+    Write-Step "pyenv-win"
+
+    $pyenvDir = Join-Path $env:USERPROFILE ".pyenv"
+    if (Test-Path $pyenvDir) {
+        Write-Verbose "Skipping pyenv-win -- $pyenvDir already exists"
+        Write-Skip "pyenv-win is already installed" -Track "pyenv-win"
+    } else {
+        try {
+            $result = pip install pyenv-win --target "$pyenvDir\pyenv-win" 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                Write-Issue "pyenv-win install failed: $($result | Select-Object -Last 3 | Out-String)" -Track "pyenv-win"
+            } else {
+                Write-Change "pyenv-win installed" -Track "pyenv-win"
+            }
+        } catch {
+            Write-Issue "pyenv-win install failed: $($_.Exception.Message)" -Track "pyenv-win"
+        }
+    }
+
+    # Ensure pyenv is on PATH for this session
+    $env:PYENV = "$pyenvDir\pyenv-win"
+    $env:PATH = "$env:PYENV\bin;$env:PYENV\shims;$env:PATH"
+}
+
+function Set-GlobalGitIgnore {
+    Write-Step "Global .gitignore"
+
+    $globalGitIgnore = Join-Path $env:USERPROFILE ".gitignore_global"
+    if (Test-Path $globalGitIgnore) {
+        Write-Skip "Global .gitignore already exists" -Track "Global .gitignore"
+    } else {
+        try {
+        @"
+# Secrets and keys
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+*.secret
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+
+# Tools
+.pytest_cache/
+.pre-commit-config-cache/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors -- .vscode/settings.json is globally ignored by default.
+# Teams who want to share workspace settings should remove this line
+# from their project's .gitignore after setup.
+.vscode/settings.json
+*.swp
+*.swo
+"@ | Set-Content $globalGitIgnore
+        git config --global core.excludesfile $globalGitIgnore
+        Write-Change "Global .gitignore created and configured" -Track "Global .gitignore"
+        } catch {
+            Write-Issue "Global .gitignore setup failed: $($_.Exception.Message)" -Track "Global .gitignore"
+        }
+    }
+}
+
+function Set-GitCommitSigning {
+    Write-Step "Git Commit Signing (SSH)"
+
+    $gpgFormat = git config --global gpg.format 2>$null
+    if ($gpgFormat -eq "ssh") {
+        Write-Skip "Git commit signing is already configured" -Track "Git Signing"
+        return
+    }
+
+    $signingKey = Join-Path $env:USERPROFILE ".ssh\id_ed25519.pub"
+    if (Test-Path $signingKey) {
+        try {
+            git config --global gpg.format ssh
+            git config --global user.signingkey $signingKey
+            git config --global commit.gpgsign true
+            Write-Change "Git commit signing configured with $signingKey" -Track "Git Signing"
+        } catch {
+            Write-Issue "Git signing config failed: $($_.Exception.Message)" -Track "Git Signing"
+        }
+    } else {
+        Write-Host "  SSH signing key not found at $signingKey -- skipping git signing setup" -ForegroundColor Yellow
+    }
+}
+
+function Set-DeltaGitConfig {
+    Write-Step "Delta Git Diff"
+
+    $deltaConfigured = git config --global core.pager 2>$null
+    if ($deltaConfigured -eq "delta") {
+        Write-Skip "Delta is already configured as git pager" -Track "Delta Config"
+        return
+    }
+
+    try {
+        git config --global core.pager "delta"
+        git config --global interactive.diffFilter "delta --color-only"
+        git config --global delta.navigate true
+        git config --global delta.light false
+        git config --global delta.side-by-side true
+        git config --global merge.conflictstyle "diff3"
+        git config --global diff.colorMoved "default"
+        Write-Change "Delta configured as git pager" -Track "Delta Config"
+    } catch {
+        Write-Issue "Delta git config failed: $($_.Exception.Message)" -Track "Delta Config"
+    }
+}
+
+function Set-GitIdentity {
+    Write-Step "Git Identity"
+
+    $name = git config --global user.name 2>$null
+    $email = git config --global user.email 2>$null
+
+    if ($name -and $email) {
+        Write-Verbose "Git identity: $name / $email"
+        Write-Skip "Git identity already configured ($name / $email)" -Track "Git Identity"
+        return
+    }
+
+    Write-Host "  Git user identity is not configured." -ForegroundColor Yellow
+    Write-Host "  Commits will fail until you set these. Run the following:" -ForegroundColor Yellow
+    Write-Host "    git config --global user.name 'Your Name'" -ForegroundColor Yellow
+    Write-Host "    git config --global user.email 'you@example.com'" -ForegroundColor Yellow
+}
+
+function Set-DefenderExclusions {
+    Write-Step "Windows Defender Exclusions"
+
+    if (-not (Get-Command Get-MpPreference -ErrorAction SilentlyContinue)) {
+        Write-Skip "Windows Defender not found -- skipping" -Track "Defender"
+        return
+    }
+
+    $exclusions = @(
+        "$env:USERPROFILE\Code",
+        "$env:USERPROFILE\.pyenv",
+        "$env:USERPROFILE\.local",
+        "$env:USERPROFILE\.venv"
+    )
+
+    foreach ($path in $exclusions) {
+        try {
+            $existing = (Get-MpPreference).ExclusionPath
+            if ($existing -contains $path) {
+                Write-Skip "$path is already excluded" -Track "Defender"
+            } else {
+                Add-MpPreference -ExclusionPath $path
+                Write-Change "Added exclusion: $path" -Track "Defender"
+            }
+        } catch {
+            Write-Issue "Failed to add exclusion for $path -- $($_.Exception.Message)" -Track "Defender"
+        }
+    }
+}
+
 function Set-VSCodeSettings {
     Write-Step "VS Code Settings"
-
-    $settingsDir = Join-Path $env:APPDATA "Code\User"
-    if (-not (Test-Path $settingsDir)) { New-Item -ItemType Directory -Path $settingsDir -Force | Out-Null }
-    $settingsPath = Join-Path $settingsDir "settings.json"
-
-    $content = @'
-{
-  // Language servers
-  "python.languageServer": "Pylance",
-
-  // Editor
-  "editor.tabSize": 2,
-  "editor.defaultFormatter": "esbenp.prettier-vscode",
-  "editor.formatOnSave": true,
-  "editor.fontFamily": "'Hack Nerd Font', Consolas, 'Courier New', monospace",
-  "editor.fontLigatures": true,
-  "editor.rulers": [88],
-  "editor.minimap.enabled": false,
-  "editor.bracketPairColorization.enabled": true,
-  "editor.guides.bracketPairs": true,
-  "editor.codeActionsOnSave": {
-    "source.fixAll.eslint": "explicit"
-  },
-
-  // Terminal
-  "terminal.integrated.fontFamily": "'Hack Nerd Font'",
-  "terminal.integrated.persistentSessionReviveProcess": "onExitAndWindowClose",
-
-  // Python-specific overrides
-  "[python]": {
-    "editor.defaultFormatter": "ms-python.black-formatter",
-    "editor.tabSize": 4,
-    "editor.codeActionsOnSave": {
-      "source.organizeImports": "explicit"
-    }
-  },
-
-  // Python
-  "python.terminal.activateEnvironment": true,
-
-  // Linting
-  "pylint.enabled": true,
-  "mypy-type-checker.enabled": true,
-  "ruff.enabled": true,
-
-  // Files
-  "files.autoSave": "afterDelay",
-  "files.autoSaveDelay": 10000,
-  "files.trimTrailingWhitespace": true,
-  "files.exclude": {
-    "**/.env": true
-  },
-
-  // JS/TS
-  "js/ts.preferences.importModuleSpecifier": "relative",
-
-  // Theme
-  "claudeCode.preferredLocation": "panel",
-  "workbench.colorTheme": "Materal Dark Blue",
-  "workbench.iconTheme": "material-icon-theme"
-}
-'@
-
-    Set-Content -Path $settingsPath -Value $content -Encoding UTF8
-    Write-Change "VS Code settings.json written"
+    & "$PSScriptRoot\Apply-VSCodeSettings.ps1" -SettingsOnly
 }
 
 function Install-VSCodeExtensions {
     Write-Step "VS Code Extensions"
-
-    if (-not (Get-Command code -ErrorAction SilentlyContinue)) {
-        Write-Issue "VS Code 'code' command not found -- skipping extensions"
-        return
-    }
-
-    $extensions = @(
-        "ms-python.python"
-        "ms-python.pylance"
-        "ms-python.black-formatter"
-        "ms-python.mypy-type-checker"
-        "charliermarsh.ruff"
-        "ms-python.pylint"
-        "KevinRose.vsc-python-indent"
-        "njpwerner.autodocstring"
-        "tamasfe.even-better-toml"
-        "usernamehw.errorlens"
-        "eamodio.gitlens"
-        "ms-azuretools.vscode-docker"
-        "rangav.vscode-thunder-client"
-        "esbenp.prettier-vscode"
-        "PKief.material-icon-theme"
-    )
-
-    $installed = (code --list-extensions 2>$null) | ForEach-Object { $_.Trim().ToLower() }
-
-    foreach ($ext in $extensions) {
-        if ($installed -contains $ext.ToLower()) {
-            Write-Skip "$ext is already installed"
-        } else {
-            try {
-                code --install-extension $ext --force 2>&1 | Out-Null
-                Write-Change "$ext installed"
-            } catch {
-                Write-Issue "$ext failed to install -- $($_.Exception.Message)"
-            }
-        }
-    }
+    & "$PSScriptRoot\Apply-VSCodeSettings.ps1" -ExtensionsOnly
 }
 
 function Set-PowerShellProfile {
     Write-Step "PowerShell Profile"
-
-    $profileDir = Split-Path $PROFILE
-    if (-not (Test-Path $profileDir)) { New-Item -ItemType Directory -Path $profileDir -Force | Out-Null }
-
-    $content = @'
-# ==============================================================================
-# SSH Agent
-# ==============================================================================
-
-$sshAgentRunning = Get-Process -Name "ssh-agent" -ErrorAction SilentlyContinue
-if (-not $sshAgentRunning) {
-    $sshService = Get-Service ssh-agent -ErrorAction SilentlyContinue
-    if ($sshService -and $sshService.StartType -eq "Disabled") {
-        Write-Host "SSH agent service is disabled. Run 'Set-Service ssh-agent -StartupType Manual' as Administrator to enable it." -ForegroundColor Yellow
-    } elseif ($sshService) {
-        Start-Service ssh-agent -ErrorAction SilentlyContinue
-        $keyPath = Join-Path $env:USERPROFILE ".ssh\id_ed25519"
-        if (Test-Path $keyPath) {
-            ssh-add $keyPath
-        } else {
-            Write-Host "SSH key not found at $keyPath" -ForegroundColor Yellow
-        }
-    } else {
-        Write-Host "SSH agent service not found on this machine." -ForegroundColor Yellow
-    }
-}
-
-# ==============================================================================
-# Chocolatey
-# ==============================================================================
-
-$ChocolateyProfile = "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
-if (Test-Path($ChocolateyProfile)) {
-    Import-Module "$ChocolateyProfile"
-}
-
-# ==============================================================================
-# Oh My Posh
-# ==============================================================================
-
-oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH\gruvbox.omp.json" | Invoke-Expression
-
-# ==============================================================================
-# Python Tools Setup
-# ==============================================================================
-
-function Setup-PythonTools {
-    param (
-        [switch]$Silent
-    )
-
-    $tools = @("pylint", "black", "mypy", "ruff", "bandit")
-
-    function Write-Verbose-Message ($msg) {
-        if (-not $Silent) { Write-Host $msg -ForegroundColor DarkGray }
-    }
-
-    function Write-Change ($msg) {
-        Write-Host $msg -ForegroundColor Green
-    }
-
-    function Write-Issue ($msg) {
-        Write-Host $msg -ForegroundColor Red
-    }
-
-    if (-not $Silent) { Write-Host "`n=== Python Tools Setup ===" -ForegroundColor Cyan }
-
-    # 1. Check Python is installed
-    $python = Get-Command python -ErrorAction SilentlyContinue
-    if (-not $python) {
-        Write-Issue "Python not found. Install from https://python.org and re-run."
-        return
-    }
-    Write-Verbose-Message "Python: $(python --version)"
-
-    # 2. Check pip is installed
-    $pip = Get-Command pip -ErrorAction SilentlyContinue
-    if (-not $pip) {
-        Write-Issue "pip not found. Run 'python -m ensurepip' to install it."
-        return
-    }
-    Write-Verbose-Message "pip: found"
-
-    # 3. Check pipx, install if missing
-    $pipx = Get-Command pipx -ErrorAction SilentlyContinue
-    if (-not $pipx) {
-        pip install --user pipx | Out-Null
-        $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "User") + ";" + $env:PATH
-        $pipx = Get-Command pipx -ErrorAction SilentlyContinue
-        if (-not $pipx) {
-            Write-Issue "pipx installed but not on PATH. Run 'pipx ensurepath', restart your terminal, and re-run."
-            return
-        }
-        Write-Change "pipx was not installed -- installed successfully"
-    } else {
-        Write-Verbose-Message "pipx: found"
-    }
-
-    # 4. Install missing tools
-    $installedPackages = pipx list --short 2>$null | ForEach-Object { ($_ -split "\s+")[0].Trim().ToLower() }
-
-    foreach ($tool in $tools) {
-        if ($installedPackages -contains $tool.ToLower()) {
-            Write-Verbose-Message "$tool : already installed"
-        } else {
-            pipx install $tool | Out-Null
-            Write-Change "$tool was not installed -- installed successfully"
-        }
-    }
-
-    # 5. Check PATH
-    $ensurepath = (pipx ensurepath 2>&1) -join " "
-    if ($ensurepath -notmatch "already in PATH") {
-        Write-Change "PATH updated -- restart your terminal for changes to take effect"
-    } else {
-        Write-Verbose-Message "PATH: already configured"
-    }
-
-    if (-not $Silent) { Write-Host "`n=== Setup complete ===`n" -ForegroundColor Cyan }
-}
-
-# Auto-run silently on every terminal start
-Setup-PythonTools -Silent
-'@
-
-    Set-Content -Path $PROFILE -Value $content -Encoding UTF8
-    Write-Change "PowerShell profile written to $PROFILE"
+    & "$PSScriptRoot\Apply-PowerShellProfile.ps1"
 }
 
 function New-PyprojectToml {
@@ -539,12 +698,15 @@ function New-PyprojectToml {
     }
 
     $content = @'
-[tool.black]
-line-length = 88
-
 [tool.ruff]
 line-length = 88
+
+[tool.ruff.lint]
 select = ["E", "F", "I"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
 
 [tool.mypy]
 strict = false
@@ -552,6 +714,60 @@ strict = false
 
     Set-Content -Path $tomlPath -Value $content -Encoding UTF8
     Write-Change "pyproject.toml scaffolded in $Path"
+}
+
+function Test-ProfileHealth {
+    Write-Step "Profile Health Check"
+
+    if (-not (Test-Path $PROFILE)) {
+        Write-Issue "No PowerShell profile found at $PROFILE"
+        Write-Host "  Run '.\Setup-DevEnvironment.ps1 -IncludeOptional' or '.\Apply-PowerShellProfile.ps1' to deploy it." -ForegroundColor Yellow
+        return
+    }
+
+    $content = Get-Content $PROFILE -Raw
+
+    $expectedSections = @{
+        "SSH Agent"         = "ssh-agent"
+        "Chocolatey"        = "chocolateyProfile"
+        "winSetup"          = "WINSETUP"
+        "Python Tools"      = "Setup-PythonTools"
+        "fzf"               = "FZF_DEFAULT_COMMAND"
+        "PSFzf"             = "Import-Module PSFzf"
+        "PSReadLine"        = "PredictionSource"
+        "zoxide"            = "zoxide init"
+        "zoxide OMP fix"    = "__zoxide_omp_prompt"
+        "pyenv-win"         = "PYENV"
+        "lazygit alias"     = "Set-Alias lg lazygit"
+        "delta"             = "DELTA_FEATURES"
+        "bat alias"         = "Set-Alias cat bat"
+        "Ctrl+F binding"    = "Ctrl\+f"
+        "Git aliases"       = "function gs"
+        "gl alias fix"      = "Remove-Alias.*gl"
+        "gc alias fix"      = "Remove-Alias.*gc"
+        "Oh My Posh"        = "oh-my-posh init"
+        "Test-ProfileHealth" = "function Test-ProfileHealth"
+        "Invoke-DevSetup"   = "function Invoke-DevSetup"
+        "Invoke-DevUpdate"  = "function Invoke-DevUpdate"
+        "Show-DevEnvironment" = "function Show-DevEnvironment"
+    }
+
+    $missing = @()
+    foreach ($section in $expectedSections.GetEnumerator()) {
+        if ($content -notmatch $section.Value) {
+            $missing += $section.Key
+        }
+    }
+
+    if ($missing.Count -eq 0) {
+        Write-Skip "Profile is complete -- all expected sections present"
+    } else {
+        Write-Host "  Profile is incomplete. Missing sections:" -ForegroundColor Yellow
+        foreach ($m in $missing) {
+            Write-Host "    - $m" -ForegroundColor Yellow
+        }
+        Write-Host "  Run '.\Apply-PowerShellProfile.ps1' to redeploy the full profile." -ForegroundColor Yellow
+    }
 }
 
 # =============================================================================
@@ -564,9 +780,48 @@ if ($ScaffoldPyproject) {
     return
 }
 
+# Short-circuit: profile health check only
+if ($CheckProfileOnly) {
+    $script:CurrentStep = 0
+    $TotalSteps = 1
+    Test-ProfileHealth
+    return
+}
+
+# PowerShell 7+ required
+if ($PSVersionTable.PSVersion.Major -lt 7) {
+    Write-Host "This script requires PowerShell 7 or later. Current version: $($PSVersionTable.PSVersion)" -ForegroundColor Red
+    Write-Host "Download PowerShell 7 from: https://aka.ms/powershell" -ForegroundColor Yellow
+    exit 1
+}
+
+# Transcript logging
+$logsDir = "$PSScriptRoot\logs"
+if (-not (Test-Path $logsDir)) { New-Item -ItemType Directory -Path $logsDir | Out-Null }
+$logPath = "$logsDir\setup-$(Get-Date -Format 'yyyyMMdd-HHmmss').txt"
+Start-Transcript -Path $logPath
+Write-Host "Logging to: $logPath" -ForegroundColor DarkGray
+
+# Outcome tracking
+$script:Installed = [System.Collections.Generic.List[string]]::new()
+$script:Skipped   = [System.Collections.Generic.List[string]]::new()
+$script:Failed    = [System.Collections.Generic.List[string]]::new()
+
+# Set WINSETUP to the directory this script lives in.
+# This is reliable regardless of where the repo is cloned.
+# Persisted to User environment so it survives terminal restarts.
+$env:WINSETUP = $PSScriptRoot
+[System.Environment]::SetEnvironmentVariable("WINSETUP", $PSScriptRoot, "User")
+Write-Host "  WINSETUP set to: $env:WINSETUP" -ForegroundColor DarkGray
+
 # Main setup
 Assert-Administrator
 
+Test-ProfileHealth
+
+Write-Verbose "Running as: $($env:USERNAME)"
+Write-Verbose "Script root: $PSScriptRoot"
+Write-Verbose "IncludeOptional: $IncludeOptional"
 Write-Host "`n=== Dev Environment Setup ===" -ForegroundColor Cyan
 Write-Host "Script root: $PSScriptRoot"
 
@@ -574,19 +829,31 @@ Install-Chocolatey
 Install-VSCode
 Install-Python
 Install-OhMyPosh
+Install-GitHubCLI
+Install-Fzf
+Install-CLITools
 Install-HackNerdFont
 Install-SSHKeys
+Add-GitHubSSHKey
 Set-WindowsTerminalFont
 Install-PythonTools
+Install-PyenvWin
+Set-GlobalGitIgnore
+Set-GitCommitSigning
+Set-DeltaGitConfig
+Set-GitIdentity
 
 if ($IncludeOptional) {
     Set-VSCodeSettings
     Install-VSCodeExtensions
     Set-PowerShellProfile
+    Set-DefenderExclusions
 } else {
-    Write-Host "`nSkipping optional steps (VS Code settings, extensions, PowerShell profile)." -ForegroundColor DarkGray
+    Write-Host "`nSkipping optional steps (VS Code settings, extensions, profile, Defender exclusions)." -ForegroundColor DarkGray
     Write-Host "These are normally applied automatically by VS Code Settings Sync and OneDrive." -ForegroundColor DarkGray
     Write-Host "Pass -IncludeOptional to apply them manually as a fallback." -ForegroundColor DarkGray
 }
 
+Write-Summary
 Write-Host "`n=== Setup complete ===`n" -ForegroundColor Cyan
+Stop-Transcript
