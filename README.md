@@ -1,77 +1,273 @@
 # Windows Dev Environment Setup
 
-One script to set up a fresh Windows 11 machine for development. Safe to re-run — it skips anything already installed.
+One script to set up a complete Windows 11 development environment. Safe to re-run -- skips anything already installed.
 
-## Quick Start (ELI5)
+## Prerequisites
 
-You just got a new Windows PC (or reinstalled Windows) and need all your dev tools back. Instead of spending an hour manually installing things one by one, you run one command and it does everything for you.
+- Windows 11
+- PowerShell 7+ (download from https://aka.ms/powershell if needed)
+- Administrator access (right-click Terminal > Run as Administrator)
+- `Hack.zip` in the repo directory (included in the repo)
+- `.ssh.zip` in the repo directory (you create this -- see [SSH Keys](#ssh-keys))
 
-**Step 1:** Right-click the Start menu and pick **Terminal (Admin)**.
+## Quick Start
 
-**Step 2:** Navigate to this folder:
+**Step 1:** Open Terminal as Administrator.
+
+**Step 2:** Navigate to this repository and run:
 
 ```powershell
-cd "$env:USERPROFILE\OneDrive\Documents\Code\winSetup"
-```
-
-**Step 3:** Run the script:
-
-```powershell
+cd "path\to\winSetup"
 .\Setup-DevEnvironment.ps1
 ```
 
-That's it. Go get a coffee. When you come back, your machine will have Chocolatey, VS Code, Python, Oh My Posh, Hack Nerd Font, your SSH keys, and all your Python linting tools installed.
+**Step 3:** There is no step 3. The script handles everything.
 
-> **Already signed into GitHub and OneDrive?** Your VS Code settings, extensions, and PowerShell profile will sync automatically — the script skips those by default. If sync hasn't kicked in yet, add `-IncludeOptional` to install them manually as a fallback.
+> **Already signed into GitHub and OneDrive?** VS Code settings, extensions, and your PowerShell profile sync automatically. The script skips those by default. If sync hasn't kicked in on a fresh machine, add `-IncludeOptional` to deploy them manually.
 
-## What It Installs
+## What Gets Installed
 
-| Tool | How | Skips if |
+### Always installed
+
+| Tool | Purpose | Skips if |
 |---|---|---|
-| Chocolatey | Official bootstrap script | `choco` command exists |
-| VS Code | `choco install vscode` | `code` command exists |
-| Python | `choco install python` | `python` exists (ignores the Windows Store stub) |
-| Oh My Posh | `winget install` | `oh-my-posh` command exists |
-| Hack Nerd Font | Extracts bundled `Hack.zip` | Font files already in `C:\Windows\Fonts` |
-| SSH keys | Extracts bundled `.ssh.zip` | `~\.ssh\id_ed25519` exists |
-| Windows Terminal font | Surgical JSON edit | Already set to Hack Nerd Font |
-| Python tools | pipx (pylint, black, mypy, ruff, bandit) | Each tool checked individually |
+| Chocolatey | Windows package manager | `choco` command exists |
+| VS Code | Code editor | `code` command exists |
+| Python | Python runtime (not the Store stub) | `python` exists and is not the Store alias |
+| Oh My Posh | Themed terminal prompt (Gruvbox theme) | `oh-my-posh` command exists |
+| GitHub CLI | GitHub operations from the terminal | `gh` command exists |
+| fzf | Fuzzy finder | `fzf` command exists |
+| fd | Fast file finder | `fd` command exists |
+| PSFzf | PowerShell fzf integration module | Module already installed |
+| zoxide | Smart directory jumper | `zoxide` command exists |
+| bat | Syntax-highlighted file viewer | `bat` command exists |
+| ripgrep | Fast content search | `rg` command exists |
+| delta | Side-by-side git diff viewer | `delta` command exists |
+| lazygit | Terminal git UI | `lazygit` command exists |
+| pyenv-win | Python version manager | `~\.pyenv` directory exists |
+| Hack Nerd Font | Terminal font with icons | Font files in `C:\Windows\Fonts` |
+| SSH keys | Deployed from `.ssh.zip` | `~\.ssh\id_ed25519` exists |
+| GitHub SSH key upload | Uploads key via `gh` (auth + signing) | Key already on GitHub |
+| Windows Terminal font | Sets Hack Nerd Font in terminal config | Already set |
+| Python tools (pipx) | pylint, mypy, ruff, bandit, pre-commit, cookiecutter | Each checked individually |
+| Global .gitignore | Blocks secrets, caches, OS files from commits | `~\.gitignore_global` exists |
+| Git commit signing | SSH-based commit signatures | `gpg.format` already set to `ssh` |
+| Delta git config | Sets delta as the git pager | `core.pager` already set to `delta` |
+| Git identity check | Detects missing `user.name`/`user.email` | Already configured |
+| Profile health check | Validates the PowerShell profile has all sections | Informational only |
 
-### Optional (sync fallback)
+### Installed with `-IncludeOptional`
 
-These are normally handled by VS Code Settings Sync and OneDrive. Pass `-IncludeOptional` to apply them manually:
+These are normally handled by VS Code Settings Sync (via GitHub) and OneDrive. Use `-IncludeOptional` on a fresh machine where sync hasn't run yet.
 
 | Item | What it does |
 |---|---|
-| VS Code `settings.json` | Full replacement with standard config |
+| VS Code `settings.json` | Full replacement with standard config (backs up existing) |
 | VS Code extensions | Installs 15 extensions (Python, linting, Git, formatting) |
-| PowerShell profile | Full replacement with SSH agent, Oh My Posh, and Python tools setup |
+| PowerShell profile | Full replacement (backs up existing) |
+| Windows Defender exclusions | Excludes `~\Code`, `~\.pyenv`, `~\.local`, `~\.venv` from scanning |
 
-## Usage
+## Scripts Reference
+
+| Script | Purpose | Key flags |
+|---|---|---|
+| `Setup-DevEnvironment.ps1` | Full environment setup (requires Admin) | `-IncludeOptional`, `-CheckProfileOnly`, `-ScaffoldPyproject` |
+| `Apply-VSCodeSettings.ps1` | VS Code settings and extensions | `-SettingsOnly`, `-ExtensionsOnly` |
+| `Apply-PowerShellProfile.ps1` | Deploys `profile.ps1` to `$PROFILE` | none |
+| `Update-DevEnvironment.ps1` | Update all tools to latest versions | requires Admin for Chocolatey |
+| `profile.ps1` | Canonical PowerShell profile source (single source of truth) | -- |
+| `Helpers.ps1` | Shared helper functions (dot-sourced by all scripts) | -- |
 
 ```powershell
-# Standard setup:
+# Full setup (fresh machine):
 .\Setup-DevEnvironment.ps1
 
-# Include optional sync-fallback steps:
+# Full setup including optional sync-fallback steps:
 .\Setup-DevEnvironment.ps1 -IncludeOptional
 
+# Check profile completeness without making changes:
+.\Setup-DevEnvironment.ps1 -CheckProfileOnly
+
 # Scaffold a pyproject.toml into a project:
-.\Setup-DevEnvironment.ps1 -ScaffoldPyproject "C:\Projects\my-app"
+.\Setup-DevEnvironment.ps1 -ScaffoldPyproject "~\Code\my-app"
+
+# Deploy VS Code settings and extensions:
+.\Apply-VSCodeSettings.ps1
+
+# Deploy VS Code settings only (skip extensions):
+.\Apply-VSCodeSettings.ps1 -SettingsOnly
+
+# Deploy PowerShell profile:
+.\Apply-PowerShellProfile.ps1
+
+# Update all tools:
+.\Update-DevEnvironment.ps1
 ```
 
-## Requirements
+## Terminal Commands
 
-- Windows 11
-- PowerShell 7+
-- Run as Administrator
-- `Hack.zip` and `.ssh.zip` in the same directory as the script
+After setup, these commands are available in any terminal session.
 
-## Bundled Files
+### Environment management
 
-| File | Contents |
+| Command | What it does |
 |---|---|
-| `Hack.zip` | Hack Nerd Font TTF files |
-| `.ssh.zip` | SSH keys (`id_ed25519` + related files) |
+| `Show-DevEnvironment` | Print all tool versions and environment status |
+| `Test-ProfileHealth` | Check that your profile has all expected sections |
+| `Setup-PythonTools` | Verify and install Python tools via pipx |
+| `Invoke-DevSetup` | Run `Setup-DevEnvironment.ps1` from anywhere |
+| `Invoke-DevUpdate` | Run `Update-DevEnvironment.ps1` from anywhere |
 
-These must be placed alongside `Setup-DevEnvironment.ps1` before running.
+### Daily shortcuts
+
+| Command | What it does |
+|---|---|
+| `z <keyword>` | Jump to a directory via zoxide |
+| `zi <keyword>` | Interactive directory jump via zoxide + fzf |
+| `lg` | Launch lazygit |
+| `gs` | `git status` |
+| `ga <files>` | `git add` |
+| `gc "message"` | `git commit -m` |
+| `gp` | `git push` |
+| `gl` | `git log --oneline --graph --decorate` |
+| `cat <file>` | View file with bat (syntax highlighting) |
+
+## New Project Quickstart
+
+`$env:WINSETUP` is set automatically by your profile. If it's not set, define it first:
+
+```powershell
+$env:WINSETUP = "path\to\winSetup"
+```
+
+### 1. Create the project directory
+
+```powershell
+mkdir $env:USERPROFILE\Code\my-new-project
+cd $env:USERPROFILE\Code\my-new-project
+```
+
+### 2. Initialise git and create a virtual environment
+
+```powershell
+git init
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+```
+
+### 3. Copy template files and pre-commit config
+
+```powershell
+Copy-Item "$env:WINSETUP\templates\python-project\*" . -Recurse
+Copy-Item "$env:WINSETUP\templates\pre-commit-config.yaml" .\.pre-commit-config.yaml
+```
+
+### 4. Install hooks and make the first commit
+
+```powershell
+pre-commit install
+ga .
+gc "Initial project setup"
+```
+
+Your project now has git, a virtual environment, linting config, pre-commit hooks, and a first signed commit.
+
+## Maintenance
+
+### Recommended cadence
+
+| When | What to do |
+|---|---|
+| Weekly | Nothing -- hooks run automatically on every commit |
+| Monthly | Run `.\Update-DevEnvironment.ps1` (as Admin for Chocolatey) |
+| Per new project | Copy pre-commit config and run `pre-commit install` |
+| When joining a repo | Run `pre-commit install` after cloning |
+
+### Updating tools
+
+```powershell
+.\Update-DevEnvironment.ps1
+```
+
+This updates Chocolatey packages, winget packages, pipx tools, PSFzf, and pyenv-win in one pass. Run as Administrator to include Chocolatey updates.
+
+### Updating pre-commit hooks (per-project)
+
+```powershell
+cd ~\Code\my-project
+pre-commit autoupdate
+ga .pre-commit-config.yaml
+gc "Update pre-commit hooks"
+```
+
+## SSH Keys
+
+The setup script deploys SSH keys from `.ssh.zip` and uploads them to GitHub automatically if `gh` is authenticated.
+
+### I already have SSH keys
+
+Zip your `~\.ssh` folder contents into this directory:
+
+```powershell
+Compress-Archive -Path "$env:USERPROFILE\.ssh\*" -DestinationPath ".ssh.zip"
+```
+
+### I need to generate new keys
+
+1. Open a terminal (does not need to be Admin):
+
+   ```powershell
+   ssh-keygen -t ed25519 -C "your-email@example.com"
+   ```
+
+   Press Enter to accept the default location (`~\.ssh\id_ed25519`). Add a passphrase if you want.
+
+2. Add the public key to GitHub -- copy the output and paste it at https://github.com/settings/ssh/new:
+
+   ```powershell
+   Get-Content "$env:USERPROFILE\.ssh\id_ed25519.pub"
+   ```
+
+3. Zip the keys into this directory:
+
+   ```powershell
+   Compress-Archive -Path "$env:USERPROFILE\.ssh\*" -DestinationPath ".ssh.zip"
+   ```
+
+### I used a different key type
+
+The script defaults to `id_ed25519`. If you used a different type (e.g. `id_rsa`), update these two lines in `Setup-DevEnvironment.ps1`:
+
+| Line | What to change |
+|---|---|
+| `$keyPath = Join-Path $sshDir "id_ed25519"` (in `Install-SSHKeys`) | Change `"id_ed25519"` to your key filename |
+| `$keyPath = Join-Path $env:USERPROFILE ".ssh\id_ed25519"` (in `profile.ps1`) | Change `"id_ed25519"` to your key filename |
+
+## Documentation
+
+**Not sure where to start? See [QUICK-REFERENCE.md](QUICK-REFERENCE.md).**
+
+| Document | Contents |
+|---|---|
+| [QUICK-REFERENCE.md](QUICK-REFERENCE.md) | Single-page task navigator -- "I want to do X, where do I go?" |
+| [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | Symptom-first problem solving (40+ entries) |
+| `HowTo-Guides/` | Reference guides for every tool -- what it does, how to use it, real examples |
+| `Tutorials/` | Progressive tutorials from first terminal open to security hygiene |
+| `Cheatsheets/` | One-page quick-reference tables for every tool and capability |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | How to add tools, edit the profile, and contribute to this repo |
+
+### Where Things Live
+
+| What | Where |
+|---|---|
+| PowerShell profile | `$PROFILE` (typically `~\OneDrive\Documents\PowerShell\Microsoft.PowerShell_profile.ps1`) |
+| VS Code settings | `$env:APPDATA\Code\User\settings.json` |
+| Tools | Installed via Chocolatey, winget, pipx, and pip to their standard locations |
+| Templates | `$env:WINSETUP\templates\` |
+| SSH keys | `~\.ssh\` |
+| pyenv versions | `~\.pyenv\pyenv-win\versions\` |
+| Global .gitignore | `~\.gitignore_global` |
+
+**New to this setup?** Start with `Tutorials/01-getting-oriented.md`.
+
+**Something broken?** See [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
