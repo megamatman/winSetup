@@ -588,7 +588,20 @@ function Set-GitCommitSigning {
             git config --global gpg.format ssh
             git config --global user.signingkey $signingKey
             git config --global commit.gpgsign true
-            Write-Change "Git commit signing configured with $signingKey" -Track "Git Signing"
+
+            # Configure allowed signers file for local SSH signature verification
+            $allowedSignersPath = Join-Path $env:USERPROFILE ".ssh\allowed_signers"
+            $gitEmail = git config --global user.email 2>$null
+            if ($gitEmail) {
+                $pubKeyContent = Get-Content $signingKey
+                "$gitEmail $pubKeyContent" | Set-Content $allowedSignersPath -Encoding UTF8
+                git config --global gpg.ssh.allowedSignersFile $allowedSignersPath
+                Write-Change "Git commit signing configured with allowed signers file" -Track "Git Signing"
+            } else {
+                Write-Host "  Git user.email not set -- skipping allowed signers file." -ForegroundColor Yellow
+                Write-Host "  Run Set-GitIdentity first, then re-run this script." -ForegroundColor Yellow
+                Write-Change "Git commit signing configured (allowed signers pending)" -Track "Git Signing"
+            }
         } catch {
             Write-Issue "Git signing config failed: $($_.Exception.Message)" -Track "Git Signing"
         }
@@ -839,9 +852,9 @@ Set-WindowsTerminalFont
 Install-PythonTools
 Install-PyenvWin
 Set-GlobalGitIgnore
+Set-GitIdentity
 Set-GitCommitSigning
 Set-DeltaGitConfig
-Set-GitIdentity
 
 if ($IncludeOptional) {
     Set-VSCodeSettings

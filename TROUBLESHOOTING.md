@@ -209,6 +209,18 @@ ssh-add ~\.ssh\id_ed25519    # Load if missing
 **Cause:** Delta's colour output can interfere with interactive patch mode.
 **Fix:** Use lazygit's hunk staging instead (`lg`, then `Enter` on a file, `Space` on individual hunks).
 
+### `git tag -v` shows "gpg.ssh.allowedSignersFile needs to be configured"
+
+**Cause:** Git cannot verify SSH signatures without a local list of trusted public keys.
+**Fix:**
+```powershell
+$key = Get-Content "$env:USERPROFILE\.ssh\id_ed25519.pub"
+$email = git config --global user.email
+"$email $key" | Set-Content "$env:USERPROFILE\.ssh\allowed_signers"
+git config --global gpg.ssh.allowedSignersFile "$env:USERPROFILE\.ssh\allowed_signers"
+```
+**If that does not work:** Verify `user.email` is set with `git config --global user.email`. The allowed signers file entry must use the same email address as your git identity.
+
 ### Delta is not rendering -- output looks like plain text
 
 **Cause:** The terminal does not support the colour depth delta needs, or delta is not installed.
