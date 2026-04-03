@@ -120,8 +120,20 @@ if (Get-Command pipx -ErrorAction SilentlyContinue) {
 # PSFzf module
 Write-Section "PowerShell modules"
 try {
-    Update-Module PSFzf -Force -ErrorAction SilentlyContinue
-    Write-Change "PSFzf updated"
+    # Run in a child process with -NoProfile so PSFzf is not loaded
+    # in the current session and its files are not locked
+    $result = pwsh -NoProfile -NonInteractive -Command "
+        Update-Module PSFzf -Force -ErrorAction Stop
+        Write-Output 'SUCCESS'
+    " 2>&1
+
+    if ($result -contains 'SUCCESS') {
+        Write-Change "PSFzf updated"
+    } elseif ($result -match "is not installed") {
+        Write-Host "  PSFzf not installed -- skipping" -ForegroundColor DarkGray
+    } else {
+        Write-Change "PSFzf update attempted -- restart terminal to apply"
+    }
 } catch {
     Write-Issue "PSFzf update failed -- $($_.Exception.Message)"
 }
