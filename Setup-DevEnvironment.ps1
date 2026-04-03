@@ -55,7 +55,7 @@ Set-StrictMode -Version Latest
 # Update CoreSteps and OptionalSteps if functions are added or removed.
 # Current count: Test-ProfileHealth(1) + 17 install/config functions = 18 core,
 #                4 optional (VSCodeSettings, VSCodeExtensions, Profile, Defender).
-$CoreSteps = 18
+$CoreSteps = 19
 $OptionalSteps = 4
 $TotalSteps = if ($IncludeOptional) { $CoreSteps + $OptionalSteps } else { $CoreSteps }
 $script:CurrentStep = 0
@@ -791,6 +791,23 @@ function Test-ProfileHealth {
 # Main Execution
 # =============================================================================
 
+function Install-Jq {
+    Write-Step "jq"
+    if (Get-Command jq -ErrorAction SilentlyContinue) {
+        Write-Verbose "Skipping jq -- already installed"
+        Write-Skip "jq is already installed" -Track "jq"
+        return
+    }
+    try {
+        choco install jq -y
+        if ($LASTEXITCODE -ne 0) { Write-Issue "jq install failed (exit code: $LASTEXITCODE)" -Track "jq"; return }
+        Update-SessionPath
+        Write-Change "jq installed" -Track "jq"
+    } catch {
+        Write-Issue "jq install failed: $($_.Exception.Message)" -Track "jq"
+    }
+}
+
 # Short-circuit: pyproject scaffold
 if ($ScaffoldPyproject) {
     New-PyprojectToml -Path $ScaffoldPyproject
@@ -829,6 +846,7 @@ if ($InstallTool) {
         'bandit'      = 'Install-PythonTools'
         'pre-commit'  = 'Install-PythonTools'
         'cookiecutter'= 'Install-PythonTools'
+        'jq'          = 'Install-Jq'
         'pyenv'       = 'Install-PyenvWin'
     }
     $key = $InstallTool.ToLower()
@@ -845,6 +863,8 @@ if ($InstallTool) {
     $script:Skipped   = [System.Collections.Generic.List[string]]::new()
     $script:Failed    = [System.Collections.Generic.List[string]]::new()
     & $func
+Install-jq
+
     Write-Summary
     return
 }
@@ -918,3 +938,4 @@ if ($IncludeOptional) {
 Write-Summary
 Write-Host "`n=== Setup complete ===`n" -ForegroundColor Cyan
 Stop-Transcript
+
