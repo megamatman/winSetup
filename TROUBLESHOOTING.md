@@ -175,6 +175,25 @@ The `# nosec` comment suppresses the specific rule for that line.
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 ```
 
+### `pipx upgrade` fails with "Access is denied" on an `.exe` file
+
+**Cause:** VS Code extensions (Ruff, Pylint, Mypy) hold Python tool executables open, preventing pipx from replacing them during upgrades.
+**Fix:** Close VS Code, then re-run `.\Update-DevEnvironment.ps1`. The update script now detects running VS Code and waits automatically.
+
+### `pipx upgrade` warnings show "File exists at X and points to X, not Y" for all tools
+
+**Cause:** pipx shims are corrupted, usually from an interrupted upgrade.
+**Fix:**
+```powershell
+pipx reinstall-all
+```
+**If that does not work:** Delete the contents of `~\.local\bin` manually, then run `pipx reinstall-all`.
+
+### `pyenv update` produces "htmlfile: This command is not supported"
+
+**Cause:** pyenv's built-in update command uses a VBScript with an ActiveX component unavailable on modern Windows 11.
+**Fix:** This is handled automatically by `.\Update-DevEnvironment.ps1`, which uses pip to update pyenv-win instead. Do not run `pyenv update` directly.
+
 ### `pyenv local` sets a version but `python --version` shows the wrong one
 
 **Cause:** pyenv's shims directory is not first on PATH, or the Windows Store stub is intercepting.

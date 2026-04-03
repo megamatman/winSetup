@@ -191,6 +191,8 @@ Your project now has git, a virtual environment, linting config, pre-commit hook
 
 This updates Chocolatey packages, winget packages, pipx tools, PSFzf, and pyenv-win in one pass. Run as Administrator to include Chocolatey updates.
 
+Close VS Code before running updates. The Ruff and Pylint extensions hold Python tool executables open, which causes pipx upgrades to fail. The update script detects this and waits automatically.
+
 ### Updating pre-commit hooks (per-project)
 
 ```powershell

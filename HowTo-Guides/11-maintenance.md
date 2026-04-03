@@ -25,6 +25,12 @@ This updates:
 
 Run as Administrator to include Chocolatey updates. Without elevation, only winget, pipx, PSFzf, and pyenv updates run.
 
+**Close VS Code before running.** VS Code extensions (Ruff, Pylint, Mypy) hold Python tool executables open, causing pipx upgrades to fail with "Access is denied". The update script detects running VS Code and waits automatically until it is closed.
+
+**PSFzf** updates run in a child PowerShell process automatically, so you do not need to close your terminal.
+
+**pyenv-win** is updated via `pip install --upgrade` rather than `pyenv update`, which uses a VBScript that fails on modern Windows 11.
+
 ---
 
 ## Checking for Updates Without Installing
@@ -74,14 +80,18 @@ pipx reinstall-all             # Reinstall everything (e.g., after Python upgrad
 
 ### PSFzf module
 
+The update script handles PSFzf updates in a child process automatically. To update manually:
+
 ```powershell
-Update-Module PSFzf -Force
+pwsh -NoProfile -Command "Update-Module PSFzf -Force"
 ```
 
 ### pyenv-win
 
+Do not run `pyenv update` directly -- it uses a VBScript that fails on modern Windows 11. The update script uses pip instead:
+
 ```powershell
-pyenv update                   # Refresh the available versions list
+pip install pyenv-win --upgrade --target "$env:USERPROFILE\.pyenv\pyenv-win"
 pyenv install --list           # See newly available versions
 ```
 
@@ -164,7 +174,7 @@ winget upgrade --list | rg "OhMyPosh\|fzf"
 - **winget and Chocolatey don't conflict**: They manage separate package databases. A tool installed via winget (fzf) won't be touched by `choco upgrade all`, and vice versa.
 - **pipx tools are independent of pyenv**: pipx tools use the Python version that was active when they were installed. Changing `pyenv global` doesn't affect them. Use `pipx reinstall-all` after changing the global Python if you want them on the new version.
 - **Pre-commit autoupdate changes the config file**: `pre-commit autoupdate` modifies `.pre-commit-config.yaml` in place. Always review the changes with `git diff` before committing.
-- **PSFzf updates may require a terminal restart**: After updating PSFzf, restart your terminal to pick up the new version. The module is loaded at profile time and can't be hot-swapped.
+- **PSFzf updates are transparent**: The update script runs PSFzf updates in a child process, so the module is never locked. No terminal restart needed.
 
 ---
 

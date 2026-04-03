@@ -23,6 +23,7 @@ Manage multiple Python versions on Windows.
 - Run `pyenv rehash` after installing a new version.
 - Profile adds `$env:PYENV\bin` and `$env:PYENV\shims` to PATH automatically.
 - pipx tools use the global Python. Venvs use whichever version is active when created.
+- Do not run `pyenv update` directly on Windows 11 -- it uses a VBScript that fails. Use `Invoke-DevUpdate` or `.\Update-DevEnvironment.ps1` instead, which updates pyenv-win via pip.
 
 ---
 

@@ -6,7 +6,7 @@ Keeping your dev environment tools up to date.
 
 | Command | What it does |
 |---|---|
-| `.\Update-DevEnvironment.ps1` | Update all tools (run as Admin for Chocolatey) |
+| `.\Update-DevEnvironment.ps1` | Update all tools (run as Admin for Chocolatey). Close VS Code first -- the script waits automatically if it detects VS Code running. |
 
 ## Manual Updates
 
@@ -15,8 +15,8 @@ Keeping your dev environment tools up to date.
 | `choco upgrade all -y` | Update all Chocolatey packages |
 | `winget upgrade --all` | Update all winget packages |
 | `pipx upgrade-all` | Update all pipx tools |
-| `Update-Module PSFzf -Force` | Update PSFzf module |
-| `pyenv update` | Update pyenv available version list |
+| `pwsh -NoProfile -Command "Update-Module PSFzf -Force"` | Update PSFzf module (child process avoids lock) |
+| `pip install pyenv-win --upgrade --target "$env:USERPROFILE\.pyenv\pyenv-win"` | Update pyenv-win (do not use `pyenv update` on Win11) |
 | `pre-commit autoupdate` | Update hooks in current repo (run per-project) |
 
 ## Check Before Updating
@@ -62,7 +62,7 @@ Keeping your dev environment tools up to date.
 
 - Run `Update-DevEnvironment.ps1` as Administrator to include Chocolatey updates.
 - `pre-commit autoupdate` is per-repo -- run it in each project that uses pre-commit.
-- After updating pyenv with `pyenv update`, run `pyenv install --list` to see newly available Python versions.
+- After updating pyenv-win, run `pyenv install --list` to see newly available Python versions.
 
 ---
 
