@@ -135,40 +135,37 @@ Write-Host "`n[2/5] Remove from Setup-DevEnvironment.ps1" -ForegroundColor Cyan
 $setupPath = Join-Path $PSScriptRoot 'Setup-DevEnvironment.ps1'
 try {
     Backup-FileIfExists $setupPath
-    $lines = Get-Content $setupPath
+    $lines = @(Get-Content $setupPath)
     $safeName = ($Tool -replace '[^a-zA-Z0-9]', '')
-    $funcPattern = "function Install-$safeName"
 
-    # Find and remove function block
-    $newLines = [System.Collections.Generic.List[string]]::new()
+    # Find and remove function block + its call
+    $newLines = @()
     $inFunc = $false; $braceDepth = 0; $removed = $false
     foreach ($l in $lines) {
         if (-not $inFunc -and $l -match "^\s*function\s+Install-$safeName\s*\{") {
             $inFunc = $true; $braceDepth = 1; $removed = $true; continue
         }
         if ($inFunc) {
-            $braceDepth += ($l.ToCharArray() | Where-Object { $_ -eq '{' }).Count
-            $braceDepth -= ($l.ToCharArray() | Where-Object { $_ -eq '}' }).Count
+            $braceDepth += ([char[]]$l | Where-Object { $_ -eq '{' }).Count
+            $braceDepth -= ([char[]]$l | Where-Object { $_ -eq '}' }).Count
             if ($braceDepth -le 0) { $inFunc = $false }
             continue
         }
         # Remove the function call line
         if ($l -match "^\s*Install-$safeName\s*$") { $removed = $true; continue }
-        $newLines.Add($l)
+        $newLines += $l
     }
 
-    # Decrement $CoreSteps
-    $finalLines = [System.Collections.Generic.List[string]]::new()
-    foreach ($l in $newLines) {
-        if ($removed -and $l -match '^\$CoreSteps\s*=\s*(\d+)') {
-            $newCount = [int]$Matches[1] - 1
-            $finalLines.Add($l -replace '\d+', "$newCount")
-        } else {
-            $finalLines.Add($l)
+    # Decrement $CoreSteps if we removed something
+    if ($removed) {
+        $newLines = $newLines | ForEach-Object {
+            if ($_ -match '^\$CoreSteps\s*=\s*(\d+)') {
+                $_ -replace '\d+', ([int]$Matches[1] - 1)
+            } else { $_ }
         }
     }
 
-    $finalLines | Set-Content $setupPath -Encoding UTF8
+    $newLines | Set-Content $setupPath -Encoding UTF8
     Write-Host "  Removed Install-$safeName function and call" -ForegroundColor Green
     $results['Setup-DevEnvironment'] = 'Done'
 }
