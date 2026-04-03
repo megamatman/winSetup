@@ -55,7 +55,7 @@ Set-StrictMode -Version Latest
 # Update CoreSteps and OptionalSteps if functions are added or removed.
 # Current count: Test-ProfileHealth(1) + 17 install/config functions = 18 core,
 #                4 optional (VSCodeSettings, VSCodeExtensions, Profile, Defender).
-$CoreSteps = 19
+$CoreSteps = 20
 $OptionalSteps = 4
 $TotalSteps = if ($IncludeOptional) { $CoreSteps + $OptionalSteps } else { $CoreSteps }
 $script:CurrentStep = 0
@@ -807,7 +807,13 @@ if ($CheckProfileOnly) {
 
 # Short-circuit: install a single named tool
 if ($InstallTool) {
-    # Map friendly names to install functions. Keys are lowercase.
+    # Start transcript for install logging (mirrors Uninstall-Tool.ps1)
+    $installLogDir = Join-Path $PSScriptRoot 'logs'
+    if (-not (Test-Path $installLogDir)) { New-Item -ItemType Directory -Path $installLogDir | Out-Null }
+    $installLogFile = Join-Path $installLogDir "install-$InstallTool-$(Get-Date -Format 'yyyyMMdd-HHmmss').txt"
+    Start-Transcript -Path $installLogFile -Force
+
+    # Map friendly names to install functions for built-in multi-tool functions.
     $toolFunctions = @{
         'chocolatey'  = 'Install-Chocolatey'
         'vscode'      = 'Install-VSCode'
@@ -833,12 +839,30 @@ if ($InstallTool) {
     }
     $key = $InstallTool.ToLower()
     $func = $toolFunctions[$key]
+
+    # Fallback: tools added via the Add Tool wizard create Install-<Name>
+    # functions that aren't in the hardcoded table. Try by convention.
+    if (-not $func) {
+        $safeName = $InstallTool -replace '[^a-zA-Z0-9]', ''
+        $candidate = "Install-$safeName"
+        if (Get-Command $candidate -ErrorAction SilentlyContinue) {
+            $func = $candidate
+        }
+    }
+
     if (-not $func) {
         Write-Host "Unknown tool: $InstallTool" -ForegroundColor Red
         Write-Host "`nAvailable tools:" -ForegroundColor Yellow
         $toolFunctions.Keys | Sort-Object | ForEach-Object { Write-Host "  $_" }
+        # Also list wizard-added Install-* functions not in the table
+        Get-Command 'Install-*' -CommandType Function -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -notin $toolFunctions.Values } |
+            ForEach-Object { Write-Host "  $($_.Name -replace '^Install-', '')" }
+        Stop-Transcript
         return
     }
+
+    Write-Host "`n=== Installing: $InstallTool ===" -ForegroundColor Cyan
     $script:CurrentStep = 0
     $TotalSteps = 1
     $script:Installed = [System.Collections.Generic.List[string]]::new()
@@ -846,6 +870,8 @@ if ($InstallTool) {
     $script:Failed    = [System.Collections.Generic.List[string]]::new()
     & $func
     Write-Summary
+    Write-Host "Transcript: $installLogFile" -ForegroundColor DarkGray
+    Stop-Transcript
     return
 }
 
@@ -862,6 +888,23 @@ if (-not (Test-Path $logsDir)) { New-Item -ItemType Directory -Path $logsDir | O
 $logPath = "$logsDir\setup-$(Get-Date -Format 'yyyyMMdd-HHmmss').txt"
 Start-Transcript -Path $logPath
 Write-Host "Logging to: $logPath" -ForegroundColor DarkGray
+
+function Install-jq {
+    Write-Step "jq"
+    if (Get-Command jq -ErrorAction SilentlyContinue) {
+        Write-Verbose "Skipping jq -- already installed"
+        Write-Skip "jq is already installed" -Track "jq"
+        return
+    }
+    try {
+        choco install jq -y
+        if ($LASTEXITCODE -ne 0) { Write-Issue "jq install failed (exit code: $LASTEXITCODE)" -Track "jq"; return }
+        Update-SessionPath
+        Write-Change "jq installed" -Track "jq"
+    } catch {
+        Write-Issue "jq install failed: $($_.Exception.Message)" -Track "jq"
+    }
+}
 
 # Outcome tracking
 $script:Installed = [System.Collections.Generic.List[string]]::new()
@@ -915,7 +958,10 @@ if ($IncludeOptional) {
     Write-Host "Pass -IncludeOptional to apply them manually as a fallback." -ForegroundColor DarkGray
 }
 
+Install-jq
+
 Write-Summary
 Write-Host "`n=== Setup complete ===`n" -ForegroundColor Cyan
 Stop-Transcript
+
 
