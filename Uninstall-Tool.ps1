@@ -53,25 +53,23 @@ $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $logFile   = Join-Path $logsDir "uninstall-$Tool-$timestamp.txt"
 Start-Transcript -Path $logFile -Force
 
-# Read the package registry
+# Read the package registry by extracting just the $PackageRegistry = @{ ... }
+# block from Update-DevEnvironment.ps1 and evaluating it.
 $updateScript = Join-Path $PSScriptRoot 'Update-DevEnvironment.ps1'
-$registryContent = Get-Content $updateScript -Raw
-# Parse $PackageRegistry by dot-sourcing in a temporary scope
-$registryBlock = [scriptblock]::Create(
-    ($registryContent -split "`n" |
-        Select-String -Pattern '^\$PackageRegistry' -Context 0, 100 |
-        ForEach-Object { $_.Context.PreContext; $_.Line; $_.Context.PostContext } |
-        Out-String)
-)
-# Simpler: just read and eval the hashtable
 $PackageRegistry = $null
-foreach ($line in (Get-Content $updateScript)) {
-    if ($line -match '^\$PackageRegistry\s*=') { $inReg = $true; $regLines = @() }
-    if ($inReg) { $regLines += $line }
-    if ($inReg -and $line -match '^\}') { $inReg = $false; break }
+try {
+    $inReg = $false; $regLines = @()
+    foreach ($line in (Get-Content $updateScript)) {
+        if ($line -match '^\$PackageRegistry\s*=') { $inReg = $true; $regLines = @() }
+        if ($inReg) { $regLines += $line }
+        if ($inReg -and $line -match '^\}') { $inReg = $false; break }
+    }
+    if ($regLines) {
+        $PackageRegistry = Invoke-Expression ($regLines -join "`n")
+    }
 }
-if ($regLines) {
-    try { $PackageRegistry = Invoke-Expression ($regLines -join "`n") } catch {}
+catch {
+    Write-Host "Failed to parse `$PackageRegistry from $updateScript`: $_" -ForegroundColor Red
 }
 
 if (-not $PackageRegistry -or -not $PackageRegistry.ContainsKey($Tool)) {
