@@ -151,8 +151,10 @@ try {
             if ($braceDepth -le 0) { $inFunc = $false }
             continue
         }
-        # Remove the function call line
-        if ($l -match "^\s*Install-$safeName\s*$") { $removed = $true; continue }
+        # Remove the function call line from the main execution block.
+        # Match only unindented calls (column 0) to avoid touching the
+        # -InstallTool short-circuit block.
+        if ($l -match "^Install-$safeName\s*$") { $removed = $true; continue }
         $newLines += $l
     }
 
