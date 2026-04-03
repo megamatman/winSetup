@@ -1,18 +1,34 @@
 <#
 .SYNOPSIS
-    Updates all dev environment tools to their latest versions.
+    Updates all dev environment tools, or a single named package.
 
 .DESCRIPTION
     Runs update commands for Chocolatey packages, winget packages, pipx tools,
     and PowerShell modules. Safe to re-run at any time.
     Per-repo tools (pre-commit hooks) must be updated manually per project.
 
+.PARAMETER Package
+    Name of a specific package to update. If omitted, all tools are updated.
+    Run with an invalid name to see the list of available package names.
+
 .EXAMPLE
     .\Update-DevEnvironment.ps1
+    Update all tools.
+
+.EXAMPLE
+    .\Update-DevEnvironment.ps1 -Package ruff
+    Update only ruff via pipx.
+
+.EXAMPLE
+    .\Update-DevEnvironment.ps1 -Package lazygit
+    Update only lazygit via Chocolatey.
 #>
 
 [CmdletBinding()]
-param()
+param(
+    [Parameter(Mandatory = $false)]
+    [string]$Package
+)
 
 Set-StrictMode -Version Latest
 . "$PSScriptRoot\Helpers.ps1"
@@ -26,20 +42,35 @@ $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
 $principal = [Security.Principal.WindowsPrincipal]$identity
 $isAdmin = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
-if (-not $isAdmin) {
-    Write-Host "Not running as Administrator -- Chocolatey updates will be skipped." -ForegroundColor Yellow
-    Write-Host "Re-run as Administrator to include Chocolatey updates." -ForegroundColor Yellow
+# Package registry -- maps friendly names to their update method
+$PackageRegistry = @{
+    # Chocolatey packages
+    "vscode"      = @{ Manager = "choco";  Id = "vscode" }
+    "python"      = @{ Manager = "choco";  Id = "python" }
+    "git"         = @{ Manager = "choco";  Id = "git" }
+    "delta"       = @{ Manager = "choco";  Id = "delta" }
+    "lazygit"     = @{ Manager = "choco";  Id = "lazygit" }
+    "bat"         = @{ Manager = "choco";  Id = "bat" }
+    "ripgrep"     = @{ Manager = "choco";  Id = "ripgrep" }
+    "fd"          = @{ Manager = "choco";  Id = "fd" }
+    "zoxide"      = @{ Manager = "choco";  Id = "zoxide" }
+    # winget packages
+    "fzf"         = @{ Manager = "winget"; Id = "junegunn.fzf" }
+    "ohmyposh"    = @{ Manager = "winget"; Id = "JanDeDobbeleer.OhMyPosh" }
+    "gh"          = @{ Manager = "winget"; Id = "GitHub.cli" }
+    # pipx tools
+    "ruff"        = @{ Manager = "pipx";   Id = "ruff" }
+    "pylint"      = @{ Manager = "pipx";   Id = "pylint" }
+    "mypy"        = @{ Manager = "pipx";   Id = "mypy" }
+    "bandit"      = @{ Manager = "pipx";   Id = "bandit" }
+    "pre-commit"  = @{ Manager = "pipx";   Id = "pre-commit" }
+    "cookiecutter"= @{ Manager = "pipx";   Id = "cookiecutter" }
+    # Special handlers
+    "psfzf"       = @{ Manager = "module"; Id = "PSFzf" }
+    "pyenv"       = @{ Manager = "pyenv";  Id = "pyenv-win" }
 }
 
 function Wait-VSCodeClosed {
-    <#
-    .SYNOPSIS
-        Waits for VS Code to be closed before proceeding.
-    .DESCRIPTION
-        Detects running VS Code processes and halts execution until they are
-        closed. This prevents pipx update failures caused by VS Code extensions
-        holding Python tool executables open during upgrades.
-    #>
     $vscodeProcessNames = @("Code", "Code - Insiders")
 
     $running = Get-Process -Name $vscodeProcessNames -ErrorAction SilentlyContinue
@@ -74,92 +105,171 @@ function Wait-VSCodeClosed {
     Write-Host ""
 }
 
+function Update-SinglePackage {
+    param([string]$Name)
+
+    $key = $Name.ToLower()
+    if (-not $PackageRegistry.ContainsKey($key)) {
+        Write-Host ""
+        Write-Host "  Unknown package '$Name'." -ForegroundColor Red
+        Write-Host ""
+        Write-Host "  Available packages:" -ForegroundColor DarkGray
+        $PackageRegistry.Keys | Sort-Object | ForEach-Object {
+            $entry = $PackageRegistry[$_]
+            Write-Host ("    {0,-15} ({1})" -f $_, $entry.Manager) -ForegroundColor DarkGray
+        }
+        Write-Host ""
+        exit 1
+    }
+
+    $entry = $PackageRegistry[$key]
+    Write-Host "`n  Updating $Name ($($entry.Manager))..." -ForegroundColor Cyan
+
+    switch ($entry.Manager) {
+        "choco" {
+            if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
+                Write-Issue "Chocolatey not found"
+                return
+            }
+            if (-not $isAdmin) {
+                Write-Host "  Chocolatey requires Administrator. Re-run as Administrator." -ForegroundColor Yellow
+                return
+            }
+            choco upgrade $entry.Id -y
+            if ($LASTEXITCODE -eq 0) { Write-Change "$Name updated" } else { Write-Issue "$Name update failed" }
+        }
+        "winget" {
+            if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+                Write-Issue "winget not found"
+                return
+            }
+            winget upgrade $entry.Id --silent --accept-package-agreements --accept-source-agreements
+            if ($LASTEXITCODE -eq 0) { Write-Change "$Name updated" } else { Write-Issue "$Name update failed" }
+        }
+        "pipx" {
+            if (-not (Get-Command pipx -ErrorAction SilentlyContinue)) {
+                Write-Issue "pipx not found"
+                return
+            }
+            pipx upgrade $entry.Id
+            if ($LASTEXITCODE -eq 0) { Write-Change "$Name updated" } else { Write-Issue "$Name update failed" }
+        }
+        "module" {
+            $result = pwsh -NoProfile -NonInteractive -Command "
+                Update-Module $($entry.Id) -Force -ErrorAction Stop
+                Write-Output 'SUCCESS'
+            " 2>&1
+            if ($result -contains 'SUCCESS') { Write-Change "$Name updated" } else { Write-Issue "$Name update failed" }
+        }
+        "pyenv" {
+            if (-not (Test-Path "$env:USERPROFILE\.pyenv")) {
+                Write-Issue "pyenv-win not found"
+                return
+            }
+            $null = pip install pyenv-win --upgrade --target "$env:USERPROFILE\.pyenv\pyenv-win" 2>&1
+            if ($LASTEXITCODE -eq 0) { Write-Change "$Name updated" } else { Write-Issue "$Name update failed" }
+        }
+    }
+}
+
+function Update-All {
+    if (-not $isAdmin) {
+        Write-Host "Not running as Administrator -- Chocolatey updates will be skipped." -ForegroundColor Yellow
+        Write-Host "Re-run as Administrator to include Chocolatey updates." -ForegroundColor Yellow
+    }
+
+    # Chocolatey
+    Write-Section "Chocolatey packages"
+    if ($isAdmin -and (Get-Command choco -ErrorAction SilentlyContinue)) {
+        try {
+            choco upgrade all -y
+            if ($LASTEXITCODE -ne 0) { Write-Issue "Chocolatey upgrade failed (exit code: $LASTEXITCODE)" } else { Write-Change "Chocolatey packages updated" }
+        } catch {
+            Write-Issue "Chocolatey upgrade failed -- $($_.Exception.Message)"
+        }
+    } else {
+        Write-Host "  Skipped (requires Administrator)" -ForegroundColor DarkGray
+    }
+
+    # winget
+    Write-Section "winget packages"
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        try {
+            winget upgrade --all --silent --accept-package-agreements --accept-source-agreements
+            if ($LASTEXITCODE -ne 0) { Write-Issue "winget upgrade failed (exit code: $LASTEXITCODE)" } else { Write-Change "winget packages updated" }
+        } catch {
+            Write-Issue "winget upgrade failed -- $($_.Exception.Message)"
+        }
+    } else {
+        Write-Host "  winget not found -- skipping" -ForegroundColor DarkGray
+    }
+
+    # pipx
+    Write-Section "pipx tools"
+    if (Get-Command pipx -ErrorAction SilentlyContinue) {
+        try {
+            pipx upgrade-all
+            Write-Change "pipx tools updated"
+        } catch {
+            Write-Issue "pipx upgrade-all failed -- $($_.Exception.Message)"
+        }
+    } else {
+        Write-Host "  pipx not found -- skipping" -ForegroundColor DarkGray
+    }
+
+    # PSFzf module
+    Write-Section "PowerShell modules"
+    try {
+        $result = pwsh -NoProfile -NonInteractive -Command "
+            Update-Module PSFzf -Force -ErrorAction Stop
+            Write-Output 'SUCCESS'
+        " 2>&1
+
+        if ($result -contains 'SUCCESS') {
+            Write-Change "PSFzf updated"
+        } elseif ($result -match "is not installed") {
+            Write-Host "  PSFzf not installed -- skipping" -ForegroundColor DarkGray
+        } else {
+            Write-Change "PSFzf update attempted -- restart terminal to apply"
+        }
+    } catch {
+        Write-Issue "PSFzf update failed -- $($_.Exception.Message)"
+    }
+
+    # pyenv-win
+    Write-Section "pyenv-win"
+    if (Test-Path "$env:USERPROFILE\.pyenv") {
+        try {
+            # pyenv's built-in 'pyenv update' uses a VBScript with an ActiveX
+            # HTML component that fails on modern Windows 11. Update via pip instead.
+            $result = pip install pyenv-win --upgrade --target "$env:USERPROFILE\.pyenv\pyenv-win" 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-Change "pyenv-win updated"
+            } else {
+                Write-Issue "pyenv-win update failed -- $($result | Select-Object -Last 3 | Out-String)"
+            }
+        } catch {
+            Write-Issue "pyenv-win update failed -- $($_.Exception.Message)"
+        }
+    } else {
+        Write-Host "  pyenv-win not found -- skipping" -ForegroundColor DarkGray
+    }
+
+    Write-Host "`n=== Update complete ===`n" -ForegroundColor Cyan
+    Write-Host "Note: pre-commit hook versions are per-repo. To update them:" -ForegroundColor DarkGray
+    Write-Host "  cd <your-project>" -ForegroundColor DarkGray
+    Write-Host "  pre-commit autoupdate" -ForegroundColor DarkGray
+    Write-Host "  ga .pre-commit-config.yaml" -ForegroundColor DarkGray
+    Write-Host "  gc 'Update pre-commit hooks'" -ForegroundColor DarkGray
+}
+
+# Main execution
 Write-Host "`n=== Dev Environment Update ===" -ForegroundColor Cyan
 
 Wait-VSCodeClosed
 
-# Chocolatey
-Write-Section "Chocolatey packages"
-if ($isAdmin -and (Get-Command choco -ErrorAction SilentlyContinue)) {
-    try {
-        choco upgrade all -y
-        if ($LASTEXITCODE -ne 0) { Write-Issue "Chocolatey upgrade failed (exit code: $LASTEXITCODE)" } else { Write-Change "Chocolatey packages updated" }
-    } catch {
-        Write-Issue "Chocolatey upgrade failed -- $($_.Exception.Message)"
-    }
+if ($Package) {
+    Update-SinglePackage -Name $Package
 } else {
-    Write-Host "  Skipped (requires Administrator)" -ForegroundColor DarkGray
+    Update-All
 }
-
-# winget
-Write-Section "winget packages"
-if (Get-Command winget -ErrorAction SilentlyContinue) {
-    try {
-        winget upgrade --all --silent --accept-package-agreements --accept-source-agreements
-        if ($LASTEXITCODE -ne 0) { Write-Issue "winget upgrade failed (exit code: $LASTEXITCODE)" } else { Write-Change "winget packages updated" }
-    } catch {
-        Write-Issue "winget upgrade failed -- $($_.Exception.Message)"
-    }
-} else {
-    Write-Host "  winget not found -- skipping" -ForegroundColor DarkGray
-}
-
-# pipx
-Write-Section "pipx tools"
-if (Get-Command pipx -ErrorAction SilentlyContinue) {
-    try {
-        pipx upgrade-all
-        Write-Change "pipx tools updated"
-    } catch {
-        Write-Issue "pipx upgrade-all failed -- $($_.Exception.Message)"
-    }
-} else {
-    Write-Host "  pipx not found -- skipping" -ForegroundColor DarkGray
-}
-
-# PSFzf module
-Write-Section "PowerShell modules"
-try {
-    # Run in a child process with -NoProfile so PSFzf is not loaded
-    # in the current session and its files are not locked
-    $result = pwsh -NoProfile -NonInteractive -Command "
-        Update-Module PSFzf -Force -ErrorAction Stop
-        Write-Output 'SUCCESS'
-    " 2>&1
-
-    if ($result -contains 'SUCCESS') {
-        Write-Change "PSFzf updated"
-    } elseif ($result -match "is not installed") {
-        Write-Host "  PSFzf not installed -- skipping" -ForegroundColor DarkGray
-    } else {
-        Write-Change "PSFzf update attempted -- restart terminal to apply"
-    }
-} catch {
-    Write-Issue "PSFzf update failed -- $($_.Exception.Message)"
-}
-
-# pyenv-win
-Write-Section "pyenv-win"
-if (Test-Path "$env:USERPROFILE\.pyenv") {
-    try {
-        # pyenv's built-in 'pyenv update' uses a VBScript with an ActiveX
-        # HTML component that fails on modern Windows 11. Update via pip instead.
-        $result = pip install pyenv-win --upgrade --target "$env:USERPROFILE\.pyenv\pyenv-win" 2>&1
-        if ($LASTEXITCODE -eq 0) {
-            Write-Change "pyenv-win updated"
-        } else {
-            Write-Issue "pyenv-win update failed -- $($result | Select-Object -Last 3 | Out-String)"
-        }
-    } catch {
-        Write-Issue "pyenv-win update failed -- $($_.Exception.Message)"
-    }
-} else {
-    Write-Host "  pyenv-win not found -- skipping" -ForegroundColor DarkGray
-}
-
-Write-Host "`n=== Update complete ===`n" -ForegroundColor Cyan
-Write-Host "Note: pre-commit hook versions are per-repo. To update them:" -ForegroundColor DarkGray
-Write-Host "  cd <your-project>" -ForegroundColor DarkGray
-Write-Host "  pre-commit autoupdate" -ForegroundColor DarkGray
-Write-Host "  ga .pre-commit-config.yaml" -ForegroundColor DarkGray
-Write-Host "  gc 'Update pre-commit hooks'" -ForegroundColor DarkGray
