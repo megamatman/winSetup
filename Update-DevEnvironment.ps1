@@ -45,7 +45,6 @@ $isAdmin = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administ
 # Package registry -- maps friendly names to their update method
 $PackageRegistry = @{
     # Chocolatey packages
-    "jq" = @{ Manager = "choco"; Id = "jq" }
     "vscode"      = @{ Manager = "choco";  Id = "vscode" }
     "python"      = @{ Manager = "choco";  Id = "python" }
     "git"         = @{ Manager = "choco";  Id = "git" }
@@ -274,4 +273,6 @@ if ($Package) {
 } else {
     Update-All
 }
+
+
 

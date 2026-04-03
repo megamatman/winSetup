@@ -889,22 +889,6 @@ $logPath = "$logsDir\setup-$(Get-Date -Format 'yyyyMMdd-HHmmss').txt"
 Start-Transcript -Path $logPath
 Write-Host "Logging to: $logPath" -ForegroundColor DarkGray
 
-function Install-jq {
-    Write-Step "jq"
-    if (Get-Command jq -ErrorAction SilentlyContinue) {
-        Write-Verbose "Skipping jq -- already installed"
-        Write-Skip "jq is already installed" -Track "jq"
-        return
-    }
-    try {
-        choco install jq -y
-        if ($LASTEXITCODE -ne 0) { Write-Issue "jq install failed (exit code: $LASTEXITCODE)" -Track "jq"; return }
-        Update-SessionPath
-        Write-Change "jq installed" -Track "jq"
-    } catch {
-        Write-Issue "jq install failed: $($_.Exception.Message)" -Track "jq"
-    }
-}
 
 # Outcome tracking
 $script:Installed = [System.Collections.Generic.List[string]]::new()
@@ -958,10 +942,10 @@ if ($IncludeOptional) {
     Write-Host "Pass -IncludeOptional to apply them manually as a fallback." -ForegroundColor DarkGray
 }
 
-Install-jq
 
 Write-Summary
 Write-Host "`n=== Setup complete ===`n" -ForegroundColor Cyan
 Stop-Transcript
+
 
 
