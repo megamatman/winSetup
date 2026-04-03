@@ -23,7 +23,7 @@ The setup script created `~\.gitignore_global` and configured git to use it. Eve
 Test it:
 
 ```powershell
-cd ~\Code\tutorial-project    # Or any git repo
+cd ~\Projects\tutorial-project    # Or any git repo
 
 # Create a fake .env file
 "API_KEY=sk-fake-12345" | Set-Content .env

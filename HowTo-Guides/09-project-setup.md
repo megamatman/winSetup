@@ -78,7 +78,7 @@ Pre-commit is a framework for managing git hooks. It runs a set of checks every 
 ### Installing hooks in a project
 
 ```powershell
-cd ~\Code\my-api
+cd ~\Projects\my-api
 pre-commit install
 ```
 
@@ -230,7 +230,7 @@ If you update your pipx tools with `pipx upgrade-all`, the pre-commit hook versi
 ### Adding pre-commit to an existing project
 
 ```powershell
-cd ~\Code\existing-api
+cd ~\Projects\existing-api
 Copy-Item $WINSETUP\templates\pre-commit-config.yaml .\.pre-commit-config.yaml
 pre-commit install
 

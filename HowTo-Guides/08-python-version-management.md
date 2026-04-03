@@ -72,7 +72,7 @@ This sets the Python version used everywhere unless overridden by a local `.pyth
 ### Set a project-local version
 
 ```powershell
-cd ~\Code\legacy-app
+cd ~\Projects\legacy-app
 pyenv local 3.11.9
 ```
 
@@ -93,7 +93,7 @@ Shows the currently active Python version and where the setting comes from:
 Or if a local version is active:
 
 ```
-3.11.9 (set by ~\Code\legacy-app\.python-version)
+3.11.9 (set by ~\Projects\legacy-app\.python-version)
 ```
 
 ### List all installed versions
@@ -135,7 +135,7 @@ The `.python-version` file is the key to per-project version management. It's a 
 ### Creating it
 
 ```powershell
-cd ~\Code\my-api
+cd ~\Projects\my-api
 pyenv local 3.12.4
 ```
 
@@ -183,7 +183,7 @@ gc "Initial project setup with Python 3.12.4"
 ### Testing against multiple Python versions
 
 ```powershell
-cd ~\Code\my-library
+cd ~\Projects\my-library
 
 pyenv local 3.12.4
 python -m venv .venv-312
@@ -208,7 +208,7 @@ Your global Python is 3.12.4 but a legacy project needs 3.10:
 
 ```powershell
 pyenv install 3.10.14              # One-time install
-cd ~\Code\legacy-app
+cd ~\Projects\legacy-app
 pyenv local 3.10.14
 python --version                    # 3.10.14
 python -m venv .venv
@@ -221,7 +221,7 @@ When you `cd` out of the project, your global 3.12.4 takes over again automatica
 ### Upgrading a project to a newer Python
 
 ```powershell
-cd ~\Code\my-api
+cd ~\Projects\my-api
 pyenv install 3.13.1               # Install the new version
 pyenv local 3.13.1                 # Switch the project
 rm -r .venv                        # Delete old venv (it's tied to the old Python)

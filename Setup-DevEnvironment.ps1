@@ -660,7 +660,7 @@ function Set-DefenderExclusions {
     }
 
     $exclusions = @(
-        "$env:USERPROFILE\Code",
+        "$env:USERPROFILE\Projects",
         "$env:USERPROFILE\.pyenv",
         "$env:USERPROFILE\.local",
         "$env:USERPROFILE\.venv"

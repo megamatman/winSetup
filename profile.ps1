@@ -33,7 +33,6 @@ if (-not $env:WINSETUP) {
         "$env:USERPROFILE\winSetup"
         "$env:USERPROFILE\OneDrive\Documents\winSetup"
         "$env:USERPROFILE\source\repos\winSetup"
-        "$env:USERPROFILE\Code\winSetup"
     )
     # OneDrive business accounts use "OneDrive - CompanyName"
     $oneDriveBusiness = Get-ChildItem "$env:USERPROFILE" -Directory -Filter "OneDrive - *" -ErrorAction SilentlyContinue | Select-Object -First 1

@@ -21,8 +21,8 @@ Every Python project should have its own virtual environment. This keeps depende
 
 ```powershell
 # Create and enter a new project directory
-mkdir ~\Code\python-demo
-cd ~\Code\python-demo
+mkdir ~\Projects\python-demo
+cd ~\Projects\python-demo
 
 # Initialize git
 git init
@@ -298,7 +298,7 @@ Open `main.py` in VS Code and you'll see these working immediately -- no configu
 
 ## Exercise
 
-1. Create a new project in `~\Code\lint-exercise`
+1. Create a new project in `~\Projects\lint-exercise`
 2. Create a virtual environment and activate it
 3. Scaffold a `pyproject.toml` with the setup script
 4. Create a Python file with at least one unused import, one function without type annotations, and one hardcoded string that looks like a password

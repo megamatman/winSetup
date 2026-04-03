@@ -89,7 +89,7 @@ These are normally handled by VS Code Settings Sync (via GitHub) and OneDrive. U
 .\Setup-DevEnvironment.ps1 -CheckProfileOnly
 
 # Scaffold a pyproject.toml into a project:
-.\Setup-DevEnvironment.ps1 -ScaffoldPyproject "~\Code\my-app"
+.\Setup-DevEnvironment.ps1 -ScaffoldPyproject "~\Projects\my-app"
 
 # Deploy VS Code settings and extensions:
 .\Apply-VSCodeSettings.ps1
@@ -143,8 +143,8 @@ $env:WINSETUP = "path\to\winSetup"
 ### 1. Create the project directory
 
 ```powershell
-mkdir $env:USERPROFILE\Code\my-new-project
-cd $env:USERPROFILE\Code\my-new-project
+mkdir $env:USERPROFILE\Projects\my-new-project
+cd $env:USERPROFILE\Projects\my-new-project
 ```
 
 ### 2. Initialise git and create a virtual environment
@@ -196,7 +196,7 @@ Close VS Code before running updates. The Ruff and Pylint extensions hold Python
 ### Updating pre-commit hooks (per-project)
 
 ```powershell
-cd ~\Code\my-project
+cd ~\Projects\my-project
 pre-commit autoupdate
 ga .pre-commit-config.yaml
 gc "Update pre-commit hooks"

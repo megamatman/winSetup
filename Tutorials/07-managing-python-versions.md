@@ -89,8 +89,8 @@ Use `pyenv global` when you want to change the default for everything. This is a
 This is where pyenv becomes truly useful. Different projects can use different Python versions:
 
 ```powershell
-mkdir ~\Code\legacy-project
-cd ~\Code\legacy-project
+mkdir ~\Projects\legacy-project
+cd ~\Projects\legacy-project
 
 pyenv local 3.11.9
 ```
@@ -146,8 +146,8 @@ python --version
 # Python 3.12.4
 
 # Create the project
-mkdir ~\Code\ml-experiment
-cd ~\Code\ml-experiment
+mkdir ~\Projects\ml-experiment
+cd ~\Projects\ml-experiment
 
 # Pin this project to 3.11
 pyenv local 3.11.9
@@ -185,7 +185,7 @@ This means:
 A typical project setup:
 
 ```powershell
-cd ~\Code\my-project
+cd ~\Projects\my-project
 pyenv local 3.11.9          # Set the Python version
 python -m venv .venv         # Create venv with that version
 .venv\Scripts\Activate.ps1   # Activate it
@@ -197,7 +197,7 @@ pip install -r requirements.txt
 ## Exercise
 
 1. Install a second Python version using `pyenv install` (pick one you don't have)
-2. Create a new project directory under `~\Code\`
+2. Create a new project directory under `~\Projects\`
 3. Set the project to use the new version with `pyenv local`
 4. Verify `python --version` shows the correct version inside the directory
 5. Create a virtual environment with `python -m venv .venv`

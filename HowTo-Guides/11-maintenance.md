@@ -102,7 +102,7 @@ pyenv install --list           # See newly available versions
 Pre-commit hook versions are pinned in each project's `.pre-commit-config.yaml`. The update script does not touch these -- you update them per-project:
 
 ```powershell
-cd ~\Code\my-project
+cd ~\Projects\my-project
 pre-commit autoupdate          # Update hooks to latest versions
 gs                             # See the modified config
 ga .pre-commit-config.yaml
