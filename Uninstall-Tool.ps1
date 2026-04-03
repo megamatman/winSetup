@@ -56,6 +56,9 @@ Start-Transcript -Path $logFile -Force
 # Read the package registry by extracting just the $PackageRegistry = @{ ... }
 # block from Update-DevEnvironment.ps1 and evaluating it.
 $updateScript = Join-Path $PSScriptRoot 'Update-DevEnvironment.ps1'
+# Invoke-Expression of "$PackageRegistry = @{...}" creates the variable in the
+# caller's scope as a side effect -- the expression itself returns $null.
+# So we run it without capturing the return value, then read $PackageRegistry.
 $PackageRegistry = $null
 try {
     $inReg = $false; $regLines = @()
@@ -65,11 +68,12 @@ try {
         if ($inReg -and $line -match '^\}') { $inReg = $false; break }
     }
     if ($regLines) {
-        $PackageRegistry = Invoke-Expression ($regLines -join "`n")
+        Invoke-Expression ($regLines -join "`n")
+        # $PackageRegistry is now set as a side effect of the expression above
     }
 }
 catch {
-    Write-Host "Failed to parse `$PackageRegistry from $updateScript`: $_" -ForegroundColor Red
+    Write-Host "Failed to parse `$PackageRegistry from ${updateScript}: $_" -ForegroundColor Red
 }
 
 if (-not $PackageRegistry -or -not $PackageRegistry.ContainsKey($Tool)) {
