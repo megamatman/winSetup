@@ -31,7 +31,52 @@ if (-not $isAdmin) {
     Write-Host "Re-run as Administrator to include Chocolatey updates." -ForegroundColor Yellow
 }
 
+function Wait-VSCodeClosed {
+    <#
+    .SYNOPSIS
+        Waits for VS Code to be closed before proceeding.
+    .DESCRIPTION
+        Detects running VS Code processes and halts execution until they are
+        closed. This prevents pipx update failures caused by VS Code extensions
+        holding Python tool executables open during upgrades.
+    #>
+    $vscodeProcessNames = @("Code", "Code - Insiders")
+
+    $running = Get-Process -Name $vscodeProcessNames -ErrorAction SilentlyContinue
+    if (-not $running) { return }
+
+    Write-Host ""
+    Write-Host "  VS Code is currently running." -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  Extensions such as Ruff and Pylint hold Python tool executables" -ForegroundColor Yellow
+    Write-Host "  open. This causes pipx updates to fail with 'Access is denied'." -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  Please close VS Code, then updates will continue automatically." -ForegroundColor Yellow
+    Write-Host "  Press Ctrl+C to cancel." -ForegroundColor DarkGray
+    Write-Host ""
+
+    $dots = 0
+    try {
+        while ($true) {
+            $running = Get-Process -Name $vscodeProcessNames -ErrorAction SilentlyContinue
+            if (-not $running) { break }
+
+            $dots = ($dots % 3) + 1
+            Write-Host "`r  Waiting for VS Code to close$('.' * $dots)   " -NoNewline -ForegroundColor DarkGray
+            Start-Sleep -Seconds 3
+        }
+    } catch [System.Management.Automation.StopProcessingException] {
+        Write-Host "`n`n  Update cancelled." -ForegroundColor Yellow
+        exit 0
+    }
+
+    Write-Host "`r  VS Code closed. Proceeding with updates...          " -ForegroundColor Green
+    Write-Host ""
+}
+
 Write-Host "`n=== Dev Environment Update ===" -ForegroundColor Cyan
+
+Wait-VSCodeClosed
 
 # Chocolatey
 Write-Section "Chocolatey packages"
