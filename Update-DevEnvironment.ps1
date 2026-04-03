@@ -138,17 +138,23 @@ try {
     Write-Issue "PSFzf update failed -- $($_.Exception.Message)"
 }
 
-# pyenv
+# pyenv-win
 Write-Section "pyenv-win"
-if (Get-Command pyenv -ErrorAction SilentlyContinue) {
+if (Test-Path "$env:USERPROFILE\.pyenv") {
     try {
-        pyenv update
-        Write-Change "pyenv-win updated"
+        # pyenv's built-in 'pyenv update' uses a VBScript with an ActiveX
+        # HTML component that fails on modern Windows 11. Update via pip instead.
+        $result = pip install pyenv-win --upgrade --target "$env:USERPROFILE\.pyenv\pyenv-win" 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Change "pyenv-win updated"
+        } else {
+            Write-Issue "pyenv-win update failed -- $($result | Select-Object -Last 3 | Out-String)"
+        }
     } catch {
-        Write-Issue "pyenv update failed -- $($_.Exception.Message)"
+        Write-Issue "pyenv-win update failed -- $($_.Exception.Message)"
     }
 } else {
-    Write-Host "  pyenv not found -- skipping" -ForegroundColor DarkGray
+    Write-Host "  pyenv-win not found -- skipping" -ForegroundColor DarkGray
 }
 
 Write-Host "`n=== Update complete ===`n" -ForegroundColor Cyan
