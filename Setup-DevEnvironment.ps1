@@ -41,7 +41,11 @@ param(
     [switch]$IncludeOptional,
     [switch]$CheckProfileOnly,
     [ValidateNotNullOrEmpty()]
-    [string]$ScaffoldPyproject
+    [string]$ScaffoldPyproject,
+
+    # Install a single named tool without running full setup.
+    # Example: .\Setup-DevEnvironment.ps1 -InstallTool ruff
+    [string]$InstallTool
 )
 
 Set-StrictMode -Version Latest
@@ -798,6 +802,50 @@ if ($CheckProfileOnly) {
     $script:CurrentStep = 0
     $TotalSteps = 1
     Test-ProfileHealth
+    return
+}
+
+# Short-circuit: install a single named tool
+if ($InstallTool) {
+    # Map friendly names to install functions. Keys are lowercase.
+    $toolFunctions = @{
+        'chocolatey'  = 'Install-Chocolatey'
+        'vscode'      = 'Install-VSCode'
+        'python'      = 'Install-Python'
+        'ohmyposh'    = 'Install-OhMyPosh'
+        'gh'          = 'Install-GitHubCLI'
+        'fzf'         = 'Install-Fzf'
+        'ripgrep'     = 'Install-CLITools'
+        'bat'         = 'Install-CLITools'
+        'delta'       = 'Install-CLITools'
+        'lazygit'     = 'Install-CLITools'
+        'zoxide'      = 'Install-CLITools'
+        'fd'          = 'Install-CLITools'
+        'hacknerd'    = 'Install-HackNerdFont'
+        'pythontools' = 'Install-PythonTools'
+        'ruff'        = 'Install-PythonTools'
+        'pylint'      = 'Install-PythonTools'
+        'mypy'        = 'Install-PythonTools'
+        'bandit'      = 'Install-PythonTools'
+        'pre-commit'  = 'Install-PythonTools'
+        'cookiecutter'= 'Install-PythonTools'
+        'pyenv'       = 'Install-PyenvWin'
+    }
+    $key = $InstallTool.ToLower()
+    $func = $toolFunctions[$key]
+    if (-not $func) {
+        Write-Host "Unknown tool: $InstallTool" -ForegroundColor Red
+        Write-Host "`nAvailable tools:" -ForegroundColor Yellow
+        $toolFunctions.Keys | Sort-Object | ForEach-Object { Write-Host "  $_" }
+        return
+    }
+    $script:CurrentStep = 0
+    $TotalSteps = 1
+    $script:Installed = [System.Collections.Generic.List[string]]::new()
+    $script:Skipped   = [System.Collections.Generic.List[string]]::new()
+    $script:Failed    = [System.Collections.Generic.List[string]]::new()
+    & $func
+    Write-Summary
     return
 }
 

@@ -48,6 +48,18 @@ if (-not $env:WINSETUP) {
     }
 }
 
+# Path to winTerface repository -- used by Uninstall-Tool.ps1
+# Set automatically by Install-WinTerface.ps1. Update if you move the repo.
+if (-not $env:WINTERFACE) {
+    $wtCandidates = @(
+        "$env:USERPROFILE\winTerface"
+        "$env:USERPROFILE\OneDrive\Documents\winTerface"
+        "$env:USERPROFILE\source\repos\winTerface"
+    )
+    $wtFound = $wtCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if ($wtFound) { $env:WINTERFACE = $wtFound }
+}
+
 # ==============================================================================
 # Chocolatey
 # ==============================================================================
