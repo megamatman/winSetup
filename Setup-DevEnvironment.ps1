@@ -787,6 +787,9 @@ function Test-ProfileHealth {
     }
 }
 
+
+
+
 # =============================================================================
 # Main Execution
 # =============================================================================
@@ -943,9 +946,9 @@ if ($IncludeOptional) {
 }
 
 
+
+
+
 Write-Summary
 Write-Host "`n=== Setup complete ===`n" -ForegroundColor Cyan
 Stop-Transcript
-
-
-
