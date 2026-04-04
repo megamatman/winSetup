@@ -143,7 +143,7 @@ function Update-SinglePackage {
                 Write-Issue "winget not found"
                 return
             }
-            winget upgrade $entry.Id --silent --accept-package-agreements --accept-source-agreements
+            winget upgrade --id $entry.Id --exact --silent --accept-package-agreements --accept-source-agreements
             if ($LASTEXITCODE -eq 0) { Write-Change "$Name updated" } else { Write-Issue "$Name update failed" }
         }
         "pipx" {
@@ -178,27 +178,39 @@ function Update-All {
         Write-Host "Re-run as Administrator to include Chocolatey updates." -ForegroundColor Yellow
     }
 
+    # Update only tools registered in $PackageRegistry -- never system-wide.
+    # Group by manager for cleaner output.
+    $chocoTools  = $PackageRegistry.GetEnumerator() | Where-Object { $_.Value.Manager -eq 'choco' }
+    $wingetTools = $PackageRegistry.GetEnumerator() | Where-Object { $_.Value.Manager -eq 'winget' }
+    $pipxTools   = $PackageRegistry.GetEnumerator() | Where-Object { $_.Value.Manager -eq 'pipx' }
+
     # Chocolatey
     Write-Section "Chocolatey packages"
     if ($isAdmin -and (Get-Command choco -ErrorAction SilentlyContinue)) {
-        try {
-            choco upgrade all -y
-            if ($LASTEXITCODE -ne 0) { Write-Issue "Chocolatey upgrade failed (exit code: $LASTEXITCODE)" } else { Write-Change "Chocolatey packages updated" }
-        } catch {
-            Write-Issue "Chocolatey upgrade failed -- $($_.Exception.Message)"
+        foreach ($tool in $chocoTools) {
+            try {
+                choco upgrade $tool.Value.Id -y
+                if ($LASTEXITCODE -ne 0) { Write-Issue "$($tool.Key) upgrade failed (exit $LASTEXITCODE)" }
+                else { Write-Change "$($tool.Key) updated" }
+            } catch {
+                Write-Issue "$($tool.Key) upgrade failed -- $($_.Exception.Message)"
+            }
         }
     } else {
         Write-Host "  Skipped (requires Administrator)" -ForegroundColor DarkGray
     }
 
-    # winget
+    # winget -- use --exact to prevent partial name matching
     Write-Section "winget packages"
     if (Get-Command winget -ErrorAction SilentlyContinue) {
-        try {
-            winget upgrade --all --silent --accept-package-agreements --accept-source-agreements
-            if ($LASTEXITCODE -ne 0) { Write-Issue "winget upgrade failed (exit code: $LASTEXITCODE)" } else { Write-Change "winget packages updated" }
-        } catch {
-            Write-Issue "winget upgrade failed -- $($_.Exception.Message)"
+        foreach ($tool in $wingetTools) {
+            try {
+                winget upgrade --id $tool.Value.Id --exact --silent --accept-package-agreements --accept-source-agreements
+                if ($LASTEXITCODE -ne 0) { Write-Issue "$($tool.Key) upgrade failed (exit $LASTEXITCODE)" }
+                else { Write-Change "$($tool.Key) updated" }
+            } catch {
+                Write-Issue "$($tool.Key) upgrade failed -- $($_.Exception.Message)"
+            }
         }
     } else {
         Write-Host "  winget not found -- skipping" -ForegroundColor DarkGray
@@ -207,11 +219,14 @@ function Update-All {
     # pipx
     Write-Section "pipx tools"
     if (Get-Command pipx -ErrorAction SilentlyContinue) {
-        try {
-            pipx upgrade-all
-            Write-Change "pipx tools updated"
-        } catch {
-            Write-Issue "pipx upgrade-all failed -- $($_.Exception.Message)"
+        foreach ($tool in $pipxTools) {
+            try {
+                pipx upgrade $tool.Value.Id
+                if ($LASTEXITCODE -ne 0) { Write-Issue "$($tool.Key) upgrade failed (exit $LASTEXITCODE)" }
+                else { Write-Change "$($tool.Key) updated" }
+            } catch {
+                Write-Issue "$($tool.Key) upgrade failed -- $($_.Exception.Message)"
+            }
         }
     } else {
         Write-Host "  pipx not found -- skipping" -ForegroundColor DarkGray
