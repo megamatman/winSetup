@@ -36,5 +36,13 @@ Backup-FileIfExists $PROFILE
 Copy-Item $sourcePath $PROFILE -Force
 Write-Change "Profile deployed from profile.ps1 to $PROFILE"
 
+# Verify Oh My Posh theme is accessible
+$themePath = Join-Path $PSScriptRoot "configs" "gruvbox.omp.json"
+if (Test-Path $themePath) {
+    Write-Change "Oh My Posh theme: $themePath"
+} else {
+    Write-Issue "Oh My Posh theme not found at $themePath -- prompt will use built-in fallback"
+}
+
 Write-Host "`n=== Done ===" -ForegroundColor Cyan
 Write-Host "Restart your terminal or run '. `$PROFILE' to apply changes.`n" -ForegroundColor Yellow
