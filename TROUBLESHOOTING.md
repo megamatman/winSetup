@@ -382,3 +382,22 @@ pipx reinstall-all
 **Cause:** This warning no longer appears. PSFzf updates now run in a child process automatically.
 
 **Fix:** Update your scripts from the repository if you are still seeing this. Run `.\Update-DevEnvironment.ps1`.
+
+### pipx warns "Found a space in the pipx home path"
+
+**Cause:** Your Windows username contains a space (e.g. `C:\Users\Matt Lawrence`), causing `PIPX_HOME` to include a space. pipx does not support spaces in `PIPX_HOME` on Windows. `.exe` files in `.local\bin` will not be updated correctly.
+
+**Fix:** Set `PIPX_HOME` and `PIPX_BIN_DIR` to a path without spaces:
+
+```powershell
+[System.Environment]::SetEnvironmentVariable('PIPX_HOME', 'C:\pipx', 'User')
+[System.Environment]::SetEnvironmentVariable('PIPX_BIN_DIR', 'C:\pipx\bin', 'User')
+```
+
+Then add `C:\pipx\bin` to your User PATH and reinstall tools:
+
+```powershell
+pipx reinstall-all
+```
+
+Restart your terminal for the changes to take effect.

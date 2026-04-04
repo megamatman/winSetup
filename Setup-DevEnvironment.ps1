@@ -906,6 +906,12 @@ $env:WINSETUP = $PSScriptRoot
 Write-Host "  WINSETUP set to: $env:WINSETUP" -ForegroundColor DarkGray
 
 # Main setup
+if ($env:USERPROFILE -match ' ') {
+    Write-Host ""
+    Write-Host "  Warning: Your profile path contains a space ('$env:USERPROFILE')." -ForegroundColor Yellow
+    Write-Host "  pipx may not function correctly. See TROUBLESHOOTING.md." -ForegroundColor Yellow
+    Write-Host ""
+}
 Assert-Administrator
 
 Test-ProfileHealth

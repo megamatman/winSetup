@@ -135,16 +135,36 @@ function Update-SinglePackage {
                 Write-Host "  Chocolatey requires Administrator. Re-run as Administrator." -ForegroundColor Yellow
                 return
             }
-            choco upgrade $entry.Id -y
-            if ($LASTEXITCODE -eq 0) { Write-Change "$Name updated" } else { Write-Issue "$Name update failed" }
+            # Parse choco output to distinguish "upgraded 0/N" (already current)
+            # from "upgraded N/N" (actually updated).
+            $chocoOut = choco upgrade $entry.Id -y 2>&1 | Out-String
+            Write-Host $chocoOut
+            if ($chocoOut -match 'upgraded (\d+)/\d+ package') {
+                $upgraded = [int]$Matches[1]
+                if ($upgraded -gt 0) { Write-Change "$Name updated" }
+                else { Write-Skip "$Name is already up to date" -Track $Name }
+            } elseif ($LASTEXITCODE -ne 0) {
+                Write-Issue "$Name upgrade failed (exit $LASTEXITCODE)"
+            } else {
+                Write-Change "$Name updated"
+            }
         }
         "winget" {
             if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
                 Write-Issue "winget not found"
                 return
             }
-            winget upgrade --id $entry.Id --exact --silent --accept-package-agreements --accept-source-agreements
-            if ($LASTEXITCODE -eq 0) { Write-Change "$Name updated" } else { Write-Issue "$Name update failed" }
+            # winget returns -1978335189 (0x8A15002B) when no update is available.
+            # This is a success state, not a failure.
+            $wingetOut = winget upgrade --id $entry.Id --exact --silent --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
+            Write-Host $wingetOut
+            if ($LASTEXITCODE -eq 0) {
+                Write-Change "$Name updated"
+            } elseif ($LASTEXITCODE -eq -1978335189 -or $wingetOut -match 'No newer package versions are available') {
+                Write-Skip "$Name is already up to date" -Track $Name
+            } else {
+                Write-Issue "$Name upgrade failed (exit $LASTEXITCODE)"
+            }
         }
         "pipx" {
             if (-not (Get-Command pipx -ErrorAction SilentlyContinue)) {
@@ -152,7 +172,7 @@ function Update-SinglePackage {
                 return
             }
             pipx upgrade $entry.Id
-            if ($LASTEXITCODE -eq 0) { Write-Change "$Name updated" } else { Write-Issue "$Name update failed" }
+            if ($LASTEXITCODE -eq 0) { Write-Change "$Name updated" } else { Write-Issue "$Name upgrade failed (exit $LASTEXITCODE)" }
         }
         "module" {
             $result = pwsh -NoProfile -NonInteractive -Command "
@@ -184,14 +204,21 @@ function Update-All {
     $wingetTools = $PackageRegistry.GetEnumerator() | Where-Object { $_.Value.Manager -eq 'winget' }
     $pipxTools   = $PackageRegistry.GetEnumerator() | Where-Object { $_.Value.Manager -eq 'pipx' }
 
-    # Chocolatey
+    # Chocolatey -- parse output to detect "upgraded 0/N" (already current)
     Write-Section "Chocolatey packages"
     if ($isAdmin -and (Get-Command choco -ErrorAction SilentlyContinue)) {
         foreach ($tool in $chocoTools) {
             try {
-                choco upgrade $tool.Value.Id -y
-                if ($LASTEXITCODE -ne 0) { Write-Issue "$($tool.Key) upgrade failed (exit $LASTEXITCODE)" }
-                else { Write-Change "$($tool.Key) updated" }
+                $chocoOut = choco upgrade $tool.Value.Id -y 2>&1 | Out-String
+                Write-Host $chocoOut
+                if ($chocoOut -match 'upgraded (\d+)/\d+ package') {
+                    if ([int]$Matches[1] -gt 0) { Write-Change "$($tool.Key) updated" }
+                    else { Write-Skip "$($tool.Key) is already up to date" -Track $tool.Key }
+                } elseif ($LASTEXITCODE -ne 0) {
+                    Write-Issue "$($tool.Key) upgrade failed (exit $LASTEXITCODE)"
+                } else {
+                    Write-Change "$($tool.Key) updated"
+                }
             } catch {
                 Write-Issue "$($tool.Key) upgrade failed -- $($_.Exception.Message)"
             }
@@ -200,14 +227,20 @@ function Update-All {
         Write-Host "  Skipped (requires Administrator)" -ForegroundColor DarkGray
     }
 
-    # winget -- use --exact to prevent partial name matching
+    # winget -- use --exact flag. Exit -1978335189 means "no update available".
     Write-Section "winget packages"
     if (Get-Command winget -ErrorAction SilentlyContinue) {
         foreach ($tool in $wingetTools) {
             try {
-                winget upgrade --id $tool.Value.Id --exact --silent --accept-package-agreements --accept-source-agreements
-                if ($LASTEXITCODE -ne 0) { Write-Issue "$($tool.Key) upgrade failed (exit $LASTEXITCODE)" }
-                else { Write-Change "$($tool.Key) updated" }
+                $wingetOut = winget upgrade --id $tool.Value.Id --exact --silent --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
+                Write-Host $wingetOut
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Change "$($tool.Key) updated"
+                } elseif ($LASTEXITCODE -eq -1978335189 -or $wingetOut -match 'No newer package versions are available') {
+                    Write-Skip "$($tool.Key) is already up to date" -Track $tool.Key
+                } else {
+                    Write-Issue "$($tool.Key) upgrade failed (exit $LASTEXITCODE)"
+                }
             } catch {
                 Write-Issue "$($tool.Key) upgrade failed -- $($_.Exception.Message)"
             }
@@ -280,6 +313,15 @@ function Update-All {
 
 # Main execution
 Write-Host "`n=== Dev Environment Update ===" -ForegroundColor Cyan
+
+# Pre-flight: warn about spaces in the user profile path. pipx does not
+# support spaces in PIPX_HOME on Windows and will fail to update .exe files.
+if ($env:USERPROFILE -match ' ') {
+    Write-Host ""
+    Write-Host "  Warning: Your profile path contains a space ('$env:USERPROFILE')." -ForegroundColor Yellow
+    Write-Host "  pipx may not update tools correctly. See TROUBLESHOOTING.md." -ForegroundColor Yellow
+    Write-Host ""
+}
 
 Wait-VSCodeClosed
 
