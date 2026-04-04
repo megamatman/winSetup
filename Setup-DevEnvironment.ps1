@@ -746,6 +746,7 @@ function Test-ProfileHealth {
 
     $expectedSections = @{
         "SSH Agent"         = "ssh-agent"
+        "SSH window title"  = "SSH_CLIENT.*WindowTitle"
         "Chocolatey"        = "chocolateyProfile"
         "winSetup"          = "WINSETUP"
         "Python Tools"      = "Setup-PythonTools"

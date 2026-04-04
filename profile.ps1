@@ -61,6 +61,16 @@ if (-not $env:WINTERFACE) {
 }
 
 # ==============================================================================
+# SSH window title
+# ==============================================================================
+
+# Update the terminal window title when connected over SSH so it is easy to
+# distinguish remote sessions from local ones.
+if ($env:SSH_CLIENT) {
+    $host.UI.RawUI.WindowTitle = "SSH: $env:COMPUTERNAME"
+}
+
+# ==============================================================================
 # Chocolatey
 # ==============================================================================
 
