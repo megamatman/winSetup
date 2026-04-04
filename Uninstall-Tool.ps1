@@ -53,23 +53,20 @@ $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $logFile   = Join-Path $logsDir "uninstall-$Tool-$timestamp.txt"
 Start-Transcript -Path $logFile -Force
 
-# Read the package registry by extracting just the $PackageRegistry = @{ ... }
-# block from Update-DevEnvironment.ps1 and evaluating it.
+# Parse $PackageRegistry from Update-DevEnvironment.ps1 using regex extraction.
+# No Invoke-Expression -- avoids executing file content as code.
 $updateScript = Join-Path $PSScriptRoot 'Update-DevEnvironment.ps1'
-# Invoke-Expression of "$PackageRegistry = @{...}" creates the variable in the
-# caller's scope as a side effect -- the expression itself returns $null.
-# So we run it without capturing the return value, then read $PackageRegistry.
-$PackageRegistry = $null
+$PackageRegistry = @{}
 try {
-    $inReg = $false; $regLines = @()
-    foreach ($line in (Get-Content $updateScript)) {
-        if ($line -match '^\$PackageRegistry\s*=') { $inReg = $true; $regLines = @() }
-        if ($inReg) { $regLines += $line }
-        if ($inReg -and $line -match '^\}') { $inReg = $false; break }
-    }
-    if ($regLines) {
-        Invoke-Expression ($regLines -join "`n")
-        # $PackageRegistry is now set as a side effect of the expression above
+    $content = Get-Content $updateScript -Raw
+    # Match each entry: "key" = @{ Manager = "mgr"; Id = "id" }
+    $pattern = '"([^"]+)"\s*=\s*@\{\s*Manager\s*=\s*"([^"]+)";\s*Id\s*=\s*"([^"]+)"\s*\}'
+    $matches2 = [regex]::Matches($content, $pattern)
+    foreach ($m in $matches2) {
+        $PackageRegistry[$m.Groups[1].Value] = @{
+            Manager = $m.Groups[2].Value
+            Id      = $m.Groups[3].Value
+        }
     }
 }
 catch {
@@ -86,7 +83,10 @@ if (-not $PackageRegistry -or -not $PackageRegistry.ContainsKey($Tool)) {
     exit 1
 }
 
+# Escape $Tool for use in regex patterns -- prevents regex injection if the
+# tool name contains metacharacters like . * ? [ ] etc.
 $entry = $PackageRegistry[$Tool]
+$escapedTool = [regex]::Escape($Tool)
 Write-Host "`n=== Uninstalling: $Tool ===" -ForegroundColor Cyan
 Write-Host "  Manager: $($entry.Manager)"
 Write-Host "  Package: $($entry.Id)"
@@ -184,7 +184,7 @@ Write-Host "`n[3/5] Remove from Update-DevEnvironment.ps1" -ForegroundColor Cyan
 try {
     Backup-FileIfExists $updateScript
     $lines = Get-Content $updateScript
-    $newLines = $lines | Where-Object { $_ -notmatch "^\s*`"$Tool`"\s*=" }
+    $newLines = $lines | Where-Object { $_ -notmatch "^\s*`"$escapedTool`"\s*=" }
     $newLines | Set-Content $updateScript -Encoding UTF8
     Write-Host "  Removed '$Tool' from `$PackageRegistry" -ForegroundColor Green
     $results['Update-DevEnvironment'] = 'Done'
@@ -205,10 +205,11 @@ try {
         $content = Get-Content $profilePath
         # Search for lines mentioning the tool's command or name
         $command = $entry.Id
+        $escapedCommand = [regex]::Escape($command)
         $matchingLines = @($content | Where-Object {
-            $_ -match "Set-Alias\s+\S+\s+$Tool" -or
-            $_ -match "Set-Alias\s+\S+\s+$command" -or
-            ($_ -match $Tool -and $_ -notmatch '^\s*#' -and $_ -notmatch 'PackageRegistry')
+            $_ -match "Set-Alias\s+\S+\s+$escapedTool" -or
+            $_ -match "Set-Alias\s+\S+\s+$escapedCommand" -or
+            ($_ -match $escapedTool -and $_ -notmatch '^\s*#' -and $_ -notmatch 'PackageRegistry')
         })
 
         if ($matchingLines.Count -gt 0) {
@@ -253,7 +254,7 @@ if (-not $env:WINTERFACE) {
         Backup-FileIfExists $wtWinSetup
         $lines = Get-Content $wtWinSetup
         # Remove the @{ Name = '<Tool>'; ... } line from $script:KnownTools
-        $newLines = $lines | Where-Object { $_ -notmatch "Name\s*=\s*'$Tool'" }
+        $newLines = $lines | Where-Object { $_ -notmatch "Name\s*=\s*'$escapedTool'" }
         $newLines | Set-Content $wtWinSetup -Encoding UTF8
         Write-Host "  Removed '$Tool' from `$script:KnownTools" -ForegroundColor Green
         $results['winTerface'] = 'Done'
