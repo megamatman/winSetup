@@ -156,7 +156,7 @@ function Update-SinglePackage {
             }
             # winget returns -1978335189 (0x8A15002B) when no update is available.
             # This is a success state, not a failure.
-            $wingetOut = winget upgrade --id $entry.Id --exact --silent --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
+            $wingetOut = winget upgrade --id $entry.Id --exact --silent --disable-interactivity --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
             Write-Host $wingetOut
             if ($LASTEXITCODE -eq 0) {
                 Write-Change "$Name updated"
@@ -232,7 +232,7 @@ function Update-All {
     if (Get-Command winget -ErrorAction SilentlyContinue) {
         foreach ($tool in $wingetTools) {
             try {
-                $wingetOut = winget upgrade --id $tool.Value.Id --exact --silent --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
+                $wingetOut = winget upgrade --id $tool.Value.Id --exact --silent --disable-interactivity --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
                 Write-Host $wingetOut
                 if ($LASTEXITCODE -eq 0) {
                     Write-Change "$($tool.Key) updated"
