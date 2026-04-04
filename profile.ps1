@@ -61,16 +61,6 @@ if (-not $env:WINTERFACE) {
 }
 
 # ==============================================================================
-# SSH window title
-# ==============================================================================
-
-# Update the terminal window title when connected over SSH so it is easy to
-# distinguish remote sessions from local ones.
-if ($env:SSH_CLIENT) {
-    $host.UI.RawUI.WindowTitle = "SSH: $env:COMPUTERNAME"
-}
-
-# ==============================================================================
 # Chocolatey
 # ==============================================================================
 
@@ -264,7 +254,13 @@ Set-PSReadLineKeyHandler -Key DownArrow -Function HistorySearchForward
 # ==============================================================================
 
 if (Get-Command oh-my-posh -ErrorAction SilentlyContinue) {
-    oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH\gruvbox.omp.json" | Invoke-Expression
+    # Theme managed by winSetup (configs/gruvbox.omp.json). Falls back to
+    # the Oh My Posh built-in theme if winSetup copy is not found.
+    $ompTheme = if ($env:WINSETUP) { "$env:WINSETUP\configs\gruvbox.omp.json" } else { $null }
+    if (-not $ompTheme -or -not (Test-Path $ompTheme)) {
+        $ompTheme = "$env:POSH_THEMES_PATH\gruvbox.omp.json"
+    }
+    oh-my-posh init pwsh --config $ompTheme | Invoke-Expression
 }
 
 # ==============================================================================
