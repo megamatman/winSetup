@@ -176,8 +176,15 @@ function Update-SinglePackage {
                 Write-Issue "pipx not found"
                 return
             }
-            pipx upgrade $entry.Id
-            if ($LASTEXITCODE -eq 0) { Write-Change "$Name updated" } else { Write-Issue "$Name upgrade failed (exit $LASTEXITCODE)" }
+            $pipxOut = pipx upgrade $entry.Id 2>&1 | Out-String
+            Write-Host $pipxOut
+            if ($pipxOut -match 'already at latest version') {
+                Write-Skip "$Name is already up to date" -Track $Name
+            } elseif ($LASTEXITCODE -eq 0) {
+                Write-Change "$Name updated"
+            } else {
+                Write-Issue "$Name upgrade failed (exit $LASTEXITCODE)"
+            }
         }
         "module" {
             $result = pwsh -NoProfile -NonInteractive -Command "
@@ -263,9 +270,15 @@ function Update-All {
     if (Get-Command pipx -ErrorAction SilentlyContinue) {
         foreach ($tool in $pipxTools) {
             try {
-                pipx upgrade $tool.Value.Id
-                if ($LASTEXITCODE -ne 0) { Write-Issue "$($tool.Key) upgrade failed (exit $LASTEXITCODE)" }
-                else { Write-Change "$($tool.Key) updated" }
+                $pipxOut = pipx upgrade $tool.Value.Id 2>&1 | Out-String
+                Write-Host $pipxOut
+                if ($pipxOut -match 'already at latest version') {
+                    Write-Skip "$($tool.Key) is already up to date" -Track $tool.Key
+                } elseif ($LASTEXITCODE -eq 0) {
+                    Write-Change "$($tool.Key) updated"
+                } else {
+                    Write-Issue "$($tool.Key) upgrade failed (exit $LASTEXITCODE)"
+                }
             } catch {
                 Write-Issue "$($tool.Key) upgrade failed -- $($_.Exception.Message)"
             }
