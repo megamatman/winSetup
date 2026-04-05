@@ -385,19 +385,45 @@ pipx reinstall-all
 
 ### pipx warns "Found a space in the pipx home path"
 
-**Cause:** Your Windows username contains a space (e.g. `C:\Users\Matt Lawrence`), causing `PIPX_HOME` to include a space. pipx does not support spaces in `PIPX_HOME` on Windows. `.exe` files in `.local\bin` will not be updated correctly.
+**Symptom:** pipx warns "Found a space in the pipx home path" on every tool update, and some `.exe` files are not updated ("File exists at ... Not modifying").
 
-**Fix:** Set `PIPX_HOME` and `PIPX_BIN_DIR` to a path without spaces:
+**Cause:** Windows username contains a space (e.g. "Matt Lawrence"), causing `PIPX_HOME` to default to a path containing a space. pipx does not support spaces in `PIPX_HOME` on Windows.
 
+**Fix:** Migrate pipx to a path without spaces. Run the following steps in a PS7 session:
+
+**Step 1** -- Set new pipx locations:
 ```powershell
 [System.Environment]::SetEnvironmentVariable('PIPX_HOME', 'C:\pipx', 'User')
 [System.Environment]::SetEnvironmentVariable('PIPX_BIN_DIR', 'C:\pipx\bin', 'User')
 ```
 
-Then add `C:\pipx\bin` to your User PATH and reinstall tools:
-
+**Step 2** -- Add `C:\pipx\bin` to User PATH before `.local\bin`:
 ```powershell
-pipx reinstall-all
+$current = [System.Environment]::GetEnvironmentVariable('PATH', 'User') -split ';'
+$cleaned = $current | Where-Object { $_ -ne 'C:\pipx\bin' }
+$reordered = @('C:\pipx\bin') + $cleaned
+[System.Environment]::SetEnvironmentVariable('PATH', ($reordered -join ';'), 'User')
 ```
 
-Restart your terminal for the changes to take effect.
+**Step 3** -- Restart your shell to pick up the new environment variables.
+
+**Step 4** -- Reinstall all pipx packages into the new location:
+```powershell
+@('ruff','mypy','pylint','bandit','pre-commit','cookiecutter') |
+    ForEach-Object { pipx install $_ }
+```
+
+**Step 5** -- Remove old stubs from `.local\bin`:
+```powershell
+@('ruff','mypy','dmypy','mypyc','stubgen','stubtest','pylint',
+  'pylint-config','pyreverse','symilar','bandit','bandit-baseline',
+  'bandit-config-generator','pre-commit','cookiecutter') |
+    ForEach-Object {
+        Remove-Item "$env:USERPROFILE\.local\bin\$_.exe" -ErrorAction SilentlyContinue
+    }
+Remove-Item "$env:USERPROFILE\.local\share\man\man1\bandit.1" -ErrorAction SilentlyContinue
+```
+
+**Step 6** -- Restart your shell and run `.\Update-DevEnvironment.ps1` to confirm no pipx warnings appear.
+
+**Note:** The warning "Your profile path contains a space" from winSetup is a pre-flight check that will continue to appear -- this is informational and cannot be resolved without renaming your Windows user account. The pipx migration above resolves the functional issues it causes.
