@@ -909,7 +909,9 @@ Write-Host "  WINSETUP set to: $env:WINSETUP" -ForegroundColor DarkGray
 if ($env:USERPROFILE -match ' ') {
     Write-Host ""
     Write-Host "  Warning: Your profile path contains a space ('$env:USERPROFILE')." -ForegroundColor Yellow
-    Write-Host "  pipx may not function correctly. See TROUBLESHOOTING.md." -ForegroundColor Yellow
+    Write-Host "  If you have not already migrated pipx to C:\pipx, tools may not update" -ForegroundColor Yellow
+    Write-Host "  correctly. See TROUBLESHOOTING.md -- 'pipx space in home path' for steps." -ForegroundColor Yellow
+    Write-Host "  If you have already migrated pipx, this warning can be ignored." -ForegroundColor DarkGray
     Write-Host ""
 }
 Assert-Administrator
