@@ -78,21 +78,45 @@ if (Test-Path($ChocolateyProfile)) {
 # (it runs standalone, not from $PSScriptRoot). If the Helpers.ps1 signatures
 # change, these local copies must be updated manually.
 function Setup-PythonTools {
+    <#
+    .SYNOPSIS
+        Ensures Python, pip, pipx, and core Python tools are installed.
+    .DESCRIPTION
+        Checks for Python and pip, installs pipx if missing, then installs any
+        missing tools (pylint, mypy, ruff, bandit, pre-commit, cookiecutter) via pipx.
+        Runs silently when called from the daily auto-check.
+    .PARAMETER Silent
+        Suppresses informational output; only changes and errors are shown.
+    #>
     param (
         [switch]$Silent
     )
 
     $tools = @("pylint", "mypy", "ruff", "bandit", "pre-commit", "cookiecutter")
 
+    <#
+    .SYNOPSIS
+        Writes an informational message unless Silent mode is active.
+    #>
     function Write-Verbose-Message ($msg) {
         if (-not $Silent) { Write-Host $msg -ForegroundColor DarkGray }
     }
 
-    function Write-Change ($msg) {
+    # -Track accepted for API compatibility with Helpers.ps1 but is a no-op
+    # here since $script:Installed/$script:Failed are not available in profile context.
+    <#
+    .SYNOPSIS
+        Writes a green success message for a change that was applied.
+    #>
+    function Write-Change ($msg, [string]$Track = "") {
         Write-Host $msg -ForegroundColor Green
     }
 
-    function Write-Issue ($msg) {
+    <#
+    .SYNOPSIS
+        Writes a red error message for an issue that needs attention.
+    #>
+    function Write-Issue ($msg, [string]$Track = "") {
         Write-Host $msg -ForegroundColor Red
     }
 
@@ -286,6 +310,13 @@ if (Get-Command zoxide -ErrorAction SilentlyContinue) {
 # ==============================================================================
 
 function Test-ProfileHealth {
+    <#
+    .SYNOPSIS
+        Runs the profile health check from Setup-DevEnvironment.ps1.
+    .DESCRIPTION
+        Delegates to Setup-DevEnvironment.ps1 -CheckProfileOnly to verify that the
+        active profile matches the canonical source and all expected tools are available.
+    #>
     if ($env:WINSETUP -and (Test-Path "$env:WINSETUP\Setup-DevEnvironment.ps1")) {
         & "$env:WINSETUP\Setup-DevEnvironment.ps1" -CheckProfileOnly
     } else {
@@ -298,6 +329,13 @@ function Test-ProfileHealth {
 # ==============================================================================
 
 function Invoke-DevSetup {
+    <#
+    .SYNOPSIS
+        Runs the full dev environment setup script.
+    .DESCRIPTION
+        Convenience wrapper that invokes Setup-DevEnvironment.ps1 from the winSetup
+        repository, forwarding any arguments.
+    #>
     if ($env:WINSETUP -and (Test-Path "$env:WINSETUP\Setup-DevEnvironment.ps1")) {
         & "$env:WINSETUP\Setup-DevEnvironment.ps1" @args
     } else {
@@ -306,6 +344,13 @@ function Invoke-DevSetup {
 }
 
 function Invoke-DevUpdate {
+    <#
+    .SYNOPSIS
+        Runs the dev environment update script.
+    .DESCRIPTION
+        Convenience wrapper that invokes Update-DevEnvironment.ps1 from the winSetup
+        repository, forwarding any arguments.
+    #>
     if ($env:WINSETUP -and (Test-Path "$env:WINSETUP\Update-DevEnvironment.ps1")) {
         & "$env:WINSETUP\Update-DevEnvironment.ps1" @args
     } else {
@@ -314,6 +359,13 @@ function Invoke-DevUpdate {
 }
 
 function Show-DevEnvironment {
+    <#
+    .SYNOPSIS
+        Displays the installed versions of all managed dev tools.
+    .DESCRIPTION
+        Checks each tool in the dev environment for availability and prints its
+        version in green, or "not found" in red. Also shows key environment paths.
+    #>
     Write-Host "`n=== Dev Environment Status ===" -ForegroundColor Cyan
 
     $tools = @{

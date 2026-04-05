@@ -6,6 +6,14 @@
 # =============================================================================
 
 function Update-SessionPath {
+    <#
+    .SYNOPSIS
+        Merges Machine and User PATH into the current session.
+    .DESCRIPTION
+        Reads PATH from the registry (Machine + User) and merges with the
+        current session PATH. Ensures newly installed tools are discoverable
+        without restarting the terminal.
+    #>
     $machinePath = [System.Environment]::GetEnvironmentVariable("PATH", "Machine")
     $userPath    = [System.Environment]::GetEnvironmentVariable("PATH", "User")
     $registryPaths = "$machinePath;$userPath" -split ";" | Where-Object { $_ }
@@ -15,11 +23,37 @@ function Update-SessionPath {
 }
 
 function Write-Step ($Name) {
+    <#
+    .SYNOPSIS
+        Prints a numbered step header for the current operation.
+    .DESCRIPTION
+        Increments $script:CurrentStep and displays the step number against
+        $TotalSteps. Used by Setup-DevEnvironment.ps1 to show progress.
+    #>
     $script:CurrentStep++
     Write-Host "`n[$script:CurrentStep/$TotalSteps] $Name" -ForegroundColor Cyan
 }
 
+function Write-Section ($Name) {
+    <#
+    .SYNOPSIS
+        Prints a section header for grouped output.
+    .DESCRIPTION
+        Displays a cyan section banner. Used by Update-DevEnvironment.ps1
+        to separate output by package manager.
+    #>
+    Write-Host "`n=== $Name ===" -ForegroundColor Cyan
+}
+
 function Write-Skip ($Message, [string]$Track = "") {
+    <#
+    .SYNOPSIS
+        Prints a skip message and optionally tracks the item.
+    .DESCRIPTION
+        Displays a dark gray message indicating an operation was skipped
+        (e.g. tool already installed). Adds to $script:Skipped if -Track
+        is provided and the tracking variable exists.
+    #>
     Write-Host "  $Message" -ForegroundColor DarkGray
     if ($Track -and (Get-Variable -Name "Skipped" -Scope Script -ErrorAction SilentlyContinue)) {
         $script:Skipped.Add($Track)
@@ -27,6 +61,14 @@ function Write-Skip ($Message, [string]$Track = "") {
 }
 
 function Write-Change ($Message, [string]$Track = "") {
+    <#
+    .SYNOPSIS
+        Prints a success message and optionally tracks the item.
+    .DESCRIPTION
+        Displays a green message indicating a change was made (install,
+        config update, etc.). Adds to $script:Installed if -Track is
+        provided and the tracking variable exists.
+    #>
     Write-Host "  $Message" -ForegroundColor Green
     if ($Track -and (Get-Variable -Name "Installed" -Scope Script -ErrorAction SilentlyContinue)) {
         $script:Installed.Add($Track)
@@ -34,6 +76,13 @@ function Write-Change ($Message, [string]$Track = "") {
 }
 
 function Write-Issue ($Message, [string]$Track = "") {
+    <#
+    .SYNOPSIS
+        Prints an error message and optionally tracks the item.
+    .DESCRIPTION
+        Displays a red message indicating a failure. Adds to $script:Failed
+        if -Track is provided and the tracking variable exists.
+    #>
     Write-Host "  $Message" -ForegroundColor Red
     if ($Track -and (Get-Variable -Name "Failed" -Scope Script -ErrorAction SilentlyContinue)) {
         $script:Failed.Add($Track)
@@ -41,6 +90,13 @@ function Write-Issue ($Message, [string]$Track = "") {
 }
 
 function Backup-FileIfExists ($Path) {
+    <#
+    .SYNOPSIS
+        Creates a timestamped backup of a file if it exists.
+    .DESCRIPTION
+        Copies the file to <path>.bak-<yyyyMMdd-HHmmss> and prunes old
+        backups, keeping the most recent 3.
+    #>
     if (Test-Path $Path) {
         $backup = "$Path.bak-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
         Copy-Item $Path $backup
@@ -68,6 +124,13 @@ function Remove-OldBackups {
 }
 
 function Write-Summary {
+    <#
+    .SYNOPSIS
+        Prints the setup outcome summary (installed, skipped, failed).
+    .DESCRIPTION
+        Reads from $script:Installed, $script:Skipped, and $script:Failed
+        to produce a colour-coded summary at the end of a setup run.
+    #>
     Write-Host "`n=== Setup Summary ===" -ForegroundColor Cyan
     if ($script:Installed.Count -gt 0) {
         Write-Host "  Installed  ($($script:Installed.Count)): $($script:Installed -join ', ')" -ForegroundColor Green

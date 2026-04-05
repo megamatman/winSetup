@@ -377,12 +377,6 @@ pipx reinstall-all
 
 **Fix:** Use `Invoke-DevUpdate` or `.\Update-DevEnvironment.ps1` instead -- these use pip to update pyenv-win reliably. Do not run `pyenv update` directly.
 
-### PSFzf update shows "The version of module 'PSFzf' is currently in use"
-
-**Cause:** This warning no longer appears. PSFzf updates now run in a child process automatically.
-
-**Fix:** Update your scripts from the repository if you are still seeing this. Run `.\Update-DevEnvironment.ps1`.
-
 ### pipx warns "Found a space in the pipx home path"
 
 **Symptom:** pipx warns "Found a space in the pipx home path" on every tool update, and some `.exe` files are not updated ("File exists at ... Not modifying").

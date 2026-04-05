@@ -131,8 +131,12 @@ function Install-VSCodeExtensions {
             Write-Skip "$ext is already installed"
         } else {
             try {
-                code --install-extension $ext --force 2>&1 | Out-Null
-                Write-Change "$ext installed"
+                $null = code --install-extension $ext --force 2>&1
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Issue "$ext failed to install (exit $LASTEXITCODE)"
+                } else {
+                    Write-Change "$ext installed"
+                }
             } catch {
                 Write-Issue "$ext failed to install -- $($_.Exception.Message)"
             }

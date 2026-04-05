@@ -115,11 +115,21 @@ if ($KeepFiles) {
             }
             'winget'  { winget uninstall $entry.Id --silent }
             'pipx'    { pipx uninstall $entry.Id }
-            'module'  { Uninstall-Module $entry.Id -Force -ErrorAction SilentlyContinue }
+            'module'  {
+                # Uninstall-Module is a PS cmdlet -- it does not set $LASTEXITCODE.
+                # Success/failure is handled by the try/catch block.
+                Uninstall-Module $entry.Id -Force -ErrorAction Stop
+            }
             default   { Write-Host "  No uninstall handler for manager: $($entry.Manager)" -ForegroundColor Yellow }
         }
-        Write-Host "  Exit code: $LASTEXITCODE" -ForegroundColor DarkGray
-        $results['Uninstall'] = if ($LASTEXITCODE -eq 0 -or $null -eq $LASTEXITCODE) { 'Done' } else { "Warning (exit $LASTEXITCODE)" }
+        # $LASTEXITCODE is only meaningful for external commands (choco/winget/pipx).
+        # PS cmdlets (module) throw on failure instead.
+        if ($entry.Manager -ne 'module') {
+            Write-Host "  Exit code: $LASTEXITCODE" -ForegroundColor DarkGray
+            $results['Uninstall'] = if ($LASTEXITCODE -eq 0 -or $null -eq $LASTEXITCODE) { 'Done' } else { "Warning (exit $LASTEXITCODE)" }
+        } else {
+            $results['Uninstall'] = 'Done'
+        }
     }
     catch {
         Write-Host "  Uninstall failed: $_" -ForegroundColor Red
@@ -203,13 +213,16 @@ $profilePath = Join-Path $PSScriptRoot 'profile.ps1'
 try {
     if (Test-Path $profilePath) {
         $content = Get-Content $profilePath
-        # Search for lines mentioning the tool's command or name
+        # Search for lines that are specifically about this tool.
+        # Word-boundary assertions prevent "fd" matching inside "fd --type f"
+        # (fzf config) or other unrelated lines containing the substring.
         $command = $entry.Id
         $escapedCommand = [regex]::Escape($command)
+        $wordBoundaryTool = "(?<![a-zA-Z0-9_-])$escapedTool(?![a-zA-Z0-9_-])"
         $matchingLines = @($content | Where-Object {
             $_ -match "Set-Alias\s+\S+\s+$escapedTool" -or
             $_ -match "Set-Alias\s+\S+\s+$escapedCommand" -or
-            ($_ -match $escapedTool -and $_ -notmatch '^\s*#' -and $_ -notmatch 'PackageRegistry')
+            ($_ -match $wordBoundaryTool -and $_ -notmatch '^\s*#' -and $_ -notmatch 'PackageRegistry' -and $_ -notmatch 'function\s')
         })
 
         if ($matchingLines.Count -gt 0) {

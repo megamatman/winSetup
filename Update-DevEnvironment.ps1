@@ -33,9 +33,11 @@ param(
 Set-StrictMode -Version Latest
 . "$PSScriptRoot\Helpers.ps1"
 
-function Write-Section ($Name) {
-    Write-Host "`n=== $Name ===" -ForegroundColor Cyan
-}
+# Transcript logging (matches Setup-DevEnvironment.ps1 and Uninstall-Tool.ps1)
+$logsDir = Join-Path $PSScriptRoot 'logs'
+if (-not (Test-Path $logsDir)) { New-Item -ItemType Directory -Path $logsDir | Out-Null }
+$logFile = Join-Path $logsDir "update-$(Get-Date -Format 'yyyyMMdd-HHmmss').txt"
+Start-Transcript -Path $logFile -Force
 
 # Check elevation for Chocolatey
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -71,6 +73,14 @@ $PackageRegistry = @{
 }
 
 function Wait-VSCodeClosed {
+    <#
+    .SYNOPSIS
+        Blocks execution until all VS Code processes are closed.
+    .DESCRIPTION
+        VS Code extensions lock Python tool executables, causing pipx updates to fail.
+        This function detects running VS Code instances and waits for the user to close
+        them before allowing updates to proceed.
+    #>
     $vscodeProcessNames = @("Code", "Code - Insiders")
 
     $running = Get-Process -Name $vscodeProcessNames -ErrorAction SilentlyContinue
@@ -106,6 +116,14 @@ function Wait-VSCodeClosed {
 }
 
 function Update-SinglePackage {
+    <#
+    .SYNOPSIS
+        Updates a single package by name using its registered package manager.
+    .DESCRIPTION
+        Looks up the package in $PackageRegistry and runs the appropriate update
+        command (choco, winget, pipx, module, or pyenv). Exits with an error if
+        the package name is not recognized.
+    #>
     param([string]$Name)
 
     $key = $Name.ToLower()
@@ -215,6 +233,14 @@ function Update-SinglePackage {
 }
 
 function Update-All {
+    <#
+    .SYNOPSIS
+        Updates all registered dev environment tools.
+    .DESCRIPTION
+        Iterates through every entry in $PackageRegistry grouped by package manager
+        and runs the appropriate upgrade command. Skips Chocolatey if not running
+        as Administrator.
+    #>
     if (-not $isAdmin) {
         Write-Host "Not running as Administrator -- Chocolatey updates will be skipped." -ForegroundColor Yellow
         Write-Host "Re-run as Administrator to include Chocolatey updates." -ForegroundColor Yellow
@@ -360,8 +386,13 @@ if ($env:USERPROFILE -match ' ') {
 
 Wait-VSCodeClosed
 
-if ($Package) {
-    Update-SinglePackage -Name $Package
-} else {
-    Update-All
+try {
+    if ($Package) {
+        Update-SinglePackage -Name $Package
+    } else {
+        Update-All
+    }
+} finally {
+    Write-Host "`nTranscript: $logFile" -ForegroundColor DarkGray
+    Stop-Transcript
 }

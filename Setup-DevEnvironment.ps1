@@ -53,14 +53,24 @@ Set-StrictMode -Version Latest
 
 # Must match the number of Write-Step calls in core/optional functions respectively.
 # Update CoreSteps and OptionalSteps if functions are added or removed.
-# Current count: Test-ProfileHealth(1) + 17 install/config functions = 18 core,
-#                4 optional (VSCodeSettings, VSCodeExtensions, Profile, Defender).
-$CoreSteps = 20
+# Core (18): Test-ProfileHealth + Chocolatey + VSCode + Python + OhMyPosh +
+#   GitHubCLI + Fzf + CLITools + HackNerdFont + SSHKeys + GitHubSSHKey +
+#   WindowsTerminalFont + PythonTools + PyenvWin + GlobalGitIgnore +
+#   GitIdentity + GitCommitSigning + DeltaGitConfig
+# Optional (4): VSCodeSettings + VSCodeExtensions + Profile + Defender
+$CoreSteps = 18
 $OptionalSteps = 4
 $TotalSteps = if ($IncludeOptional) { $CoreSteps + $OptionalSteps } else { $CoreSteps }
 $script:CurrentStep = 0
 
 function Assert-Winget {
+    <#
+    .SYNOPSIS
+        Verifies that winget is available on the system.
+    .DESCRIPTION
+        Returns $true if winget is found on PATH, $false otherwise.
+        Displays a remediation message when winget is missing.
+    #>
     if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
         Write-Issue "winget not found. Install App Installer from the Microsoft Store or update Windows."
         return $false
@@ -73,6 +83,13 @@ function Assert-Winget {
 # =============================================================================
 
 function Assert-Administrator {
+    <#
+    .SYNOPSIS
+        Ensures the script is running with Administrator privileges.
+    .DESCRIPTION
+        Checks the current Windows identity for the Administrator role and
+        throws a terminating error if the session is not elevated.
+    #>
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = [Security.Principal.WindowsPrincipal]$identity
     if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
@@ -82,6 +99,13 @@ function Assert-Administrator {
 }
 
 function Install-Chocolatey {
+    <#
+    .SYNOPSIS
+        Installs the Chocolatey package manager.
+    .DESCRIPTION
+        Downloads and runs the Chocolatey install script if choco is not
+        already on PATH. Refreshes the session PATH after installation.
+    #>
     Write-Step "Chocolatey"
     if (Get-Command choco -ErrorAction SilentlyContinue) {
         Write-Verbose "Skipping Chocolatey -- already installed at $((Get-Command choco).Source)"
@@ -100,6 +124,13 @@ function Install-Chocolatey {
 }
 
 function Install-VSCode {
+    <#
+    .SYNOPSIS
+        Installs Visual Studio Code via Chocolatey.
+    .DESCRIPTION
+        Skips if the 'code' command is already available. Installs using
+        choco and refreshes the session PATH.
+    #>
     Write-Step "VS Code"
     if (Get-Command code -ErrorAction SilentlyContinue) {
         Write-Verbose "Skipping VS Code -- already installed at $((Get-Command code).Source)"
@@ -121,6 +152,13 @@ function Install-VSCode {
 }
 
 function Install-Python {
+    <#
+    .SYNOPSIS
+        Installs Python via Chocolatey.
+    .DESCRIPTION
+        Skips if a real Python (not the Windows Store stub) is already on PATH.
+        Installs using choco and refreshes the session PATH.
+    #>
     Write-Step "Python"
     $pythonCmd = Get-Command python -ErrorAction SilentlyContinue
     $isStoreStub = $pythonCmd -and $pythonCmd.Source -like "*WindowsApps*"
@@ -144,6 +182,12 @@ function Install-Python {
 }
 
 function Install-OhMyPosh {
+    <#
+    .SYNOPSIS
+        Installs Oh My Posh prompt engine via winget.
+    .DESCRIPTION
+        Skips if oh-my-posh is already on PATH. Requires winget.
+    #>
     Write-Step "Oh My Posh"
     if (Get-Command oh-my-posh -ErrorAction SilentlyContinue) {
         Write-Verbose "Skipping Oh My Posh -- already installed at $((Get-Command oh-my-posh).Source)"
@@ -162,6 +206,12 @@ function Install-OhMyPosh {
 }
 
 function Install-GitHubCLI {
+    <#
+    .SYNOPSIS
+        Installs the GitHub CLI via winget.
+    .DESCRIPTION
+        Skips if 'gh' is already on PATH. Requires winget.
+    #>
     Write-Step "GitHub CLI"
     if (Get-Command gh -ErrorAction SilentlyContinue) {
         Write-Verbose "Skipping GitHub CLI -- already installed at $((Get-Command gh).Source)"
@@ -184,6 +234,13 @@ function Install-GitHubCLI {
 }
 
 function Install-Fzf {
+    <#
+    .SYNOPSIS
+        Installs fzf, fd, and the PSFzf PowerShell module.
+    .DESCRIPTION
+        Installs fzf via winget, fd via Chocolatey, and PSFzf from the
+        PowerShell Gallery. Each component is skipped if already present.
+    #>
     Write-Step "fzf + fd + PSFzf"
 
     # Install fzf binary via winget
@@ -239,6 +296,13 @@ function Install-Fzf {
 }
 
 function Install-CLITools {
+    <#
+    .SYNOPSIS
+        Installs CLI productivity tools via Chocolatey.
+    .DESCRIPTION
+        Installs zoxide, bat, ripgrep, delta, and lazygit. Each tool is
+        skipped individually if its command is already on PATH.
+    #>
     Write-Step "CLI Tools (zoxide, bat, ripgrep, delta, lazygit)"
 
     $tools = @(
@@ -271,6 +335,14 @@ function Install-CLITools {
 }
 
 function Install-HackNerdFont {
+    <#
+    .SYNOPSIS
+        Installs the Hack Nerd Font family from a bundled zip file.
+    .DESCRIPTION
+        Extracts Hack.zip from the script directory, copies .ttf files into
+        C:\Windows\Fonts, and registers them in the Windows font registry.
+        Skips if Hack fonts are already present.
+    #>
     Write-Step "Hack Nerd Font"
     $fontsPath = "C:\Windows\Fonts"
     $alreadyInstalled = Get-ChildItem $fontsPath | Where-Object { $_.Name -like "Hack*" }
@@ -304,6 +376,14 @@ function Install-HackNerdFont {
 }
 
 function Install-SSHKeys {
+    <#
+    .SYNOPSIS
+        Deploys SSH keys from a bundled .ssh.zip archive.
+    .DESCRIPTION
+        Extracts .ssh.zip from the script directory into ~/.ssh and sets
+        owner-only ACL permissions on the private key. Skips if
+        id_ed25519 already exists.
+    #>
     Write-Step "SSH Keys"
     $sshDir = Join-Path $env:USERPROFILE ".ssh"
     $keyPath = Join-Path $sshDir "id_ed25519"
@@ -344,6 +424,14 @@ function Install-SSHKeys {
 }
 
 function Add-GitHubSSHKey {
+    <#
+    .SYNOPSIS
+        Uploads the local SSH public key to GitHub.
+    .DESCRIPTION
+        Uses the GitHub CLI to add id_ed25519.pub as both an authentication
+        and a signing key. Skips if the key is already registered on GitHub
+        or if gh is not authenticated.
+    #>
     Write-Step "GitHub SSH Key Upload"
 
     if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
@@ -403,6 +491,14 @@ function Add-GitHubSSHKey {
 }
 
 function Set-WindowsTerminalFont {
+    <#
+    .SYNOPSIS
+        Sets the default Windows Terminal font to Hack Nerd Font.
+    .DESCRIPTION
+        Patches the Windows Terminal settings.json to set
+        profiles.defaults.font.face to "Hack Nerd Font". Skips if the
+        font is already configured or settings.json is not found.
+    #>
     Write-Step "Windows Terminal Font"
     $wtSettingsPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
 
@@ -441,6 +537,14 @@ function Set-WindowsTerminalFont {
 }
 
 function Install-PythonTools {
+    <#
+    .SYNOPSIS
+        Installs Python CLI tools via pipx.
+    .DESCRIPTION
+        Ensures pipx is installed, then installs pylint, mypy, ruff,
+        bandit, pre-commit, and cookiecutter. Each tool is skipped if
+        already present in the pipx package list.
+    #>
     Write-Step "Python Tools (pipx)"
 
     $tools = @("pylint", "mypy", "ruff", "bandit", "pre-commit", "cookiecutter")
@@ -499,6 +603,13 @@ function Install-PythonTools {
 }
 
 function Install-PyenvWin {
+    <#
+    .SYNOPSIS
+        Installs pyenv-win for Python version management.
+    .DESCRIPTION
+        Installs pyenv-win via pip into ~/.pyenv and adds its bin and
+        shims directories to the session PATH. Skips if ~/.pyenv exists.
+    #>
     Write-Step "pyenv-win"
 
     $pyenvDir = Join-Path $env:USERPROFILE ".pyenv"
@@ -524,6 +635,14 @@ function Install-PyenvWin {
 }
 
 function Set-GlobalGitIgnore {
+    <#
+    .SYNOPSIS
+        Creates a global .gitignore and configures git to use it.
+    .DESCRIPTION
+        Writes a default .gitignore_global to the user profile covering
+        secrets, Python artifacts, OS files, and editor noise, then sets
+        git core.excludesfile. Skips if the file already exists.
+    #>
     Write-Step "Global .gitignore"
 
     $globalGitIgnore = Join-Path $env:USERPROFILE ".gitignore_global"
@@ -578,6 +697,14 @@ desktop.ini
 }
 
 function Set-GitCommitSigning {
+    <#
+    .SYNOPSIS
+        Configures git to sign commits with the local SSH key.
+    .DESCRIPTION
+        Sets gpg.format to ssh, enables commit.gpgsign, and creates an
+        allowed_signers file for local signature verification. Skips if
+        SSH signing is already configured.
+    #>
     Write-Step "Git Commit Signing (SSH)"
 
     $gpgFormat = git config --global gpg.format 2>$null
@@ -615,6 +742,14 @@ function Set-GitCommitSigning {
 }
 
 function Set-DeltaGitConfig {
+    <#
+    .SYNOPSIS
+        Configures delta as the default git diff pager.
+    .DESCRIPTION
+        Sets core.pager, interactive.diffFilter, and delta options
+        (navigate, side-by-side, dark mode) in the global git config.
+        Skips if delta is already the configured pager.
+    #>
     Write-Step "Delta Git Diff"
 
     $deltaConfigured = git config --global core.pager 2>$null
@@ -638,6 +773,13 @@ function Set-DeltaGitConfig {
 }
 
 function Set-GitIdentity {
+    <#
+    .SYNOPSIS
+        Checks that git user.name and user.email are configured.
+    .DESCRIPTION
+        Verifies global git identity is set. If either value is missing,
+        displays the commands needed to configure them.
+    #>
     Write-Step "Git Identity"
 
     $name = git config --global user.name 2>$null
@@ -656,6 +798,13 @@ function Set-GitIdentity {
 }
 
 function Set-DefenderExclusions {
+    <#
+    .SYNOPSIS
+        Adds developer directories to Windows Defender exclusion paths.
+    .DESCRIPTION
+        Excludes Projects, .pyenv, .local, and .venv under the user
+        profile from real-time scanning to reduce build/test overhead.
+    #>
     Write-Step "Windows Defender Exclusions"
 
     if (-not (Get-Command Get-MpPreference -ErrorAction SilentlyContinue)) {
@@ -686,21 +835,52 @@ function Set-DefenderExclusions {
 }
 
 function Set-VSCodeSettings {
+    <#
+    .SYNOPSIS
+        Deploys VS Code settings.json via Apply-VSCodeSettings.ps1.
+    .DESCRIPTION
+        Delegates to Apply-VSCodeSettings.ps1 -SettingsOnly to copy the
+        canonical settings file into the VS Code user configuration directory.
+    #>
     Write-Step "VS Code Settings"
     & "$PSScriptRoot\Apply-VSCodeSettings.ps1" -SettingsOnly
 }
 
 function Install-VSCodeExtensions {
+    <#
+    .SYNOPSIS
+        Installs VS Code extensions via Apply-VSCodeSettings.ps1.
+    .DESCRIPTION
+        Delegates to Apply-VSCodeSettings.ps1 -ExtensionsOnly to install
+        the standard set of VS Code extensions.
+    #>
     Write-Step "VS Code Extensions"
     & "$PSScriptRoot\Apply-VSCodeSettings.ps1" -ExtensionsOnly
 }
 
 function Set-PowerShellProfile {
+    <#
+    .SYNOPSIS
+        Deploys the canonical PowerShell profile to $PROFILE.
+    .DESCRIPTION
+        Delegates to Apply-PowerShellProfile.ps1 which backs up any
+        existing profile and copies the repo's profile.ps1 into place.
+    #>
     Write-Step "PowerShell Profile"
     & "$PSScriptRoot\Apply-PowerShellProfile.ps1"
 }
 
 function New-PyprojectToml {
+    <#
+    .SYNOPSIS
+        Scaffolds a pyproject.toml with default ruff and mypy settings.
+    .DESCRIPTION
+        Creates a minimal pyproject.toml in the specified directory with
+        ruff lint/format rules and mypy configuration. Skips if the file
+        already exists.
+    .PARAMETER Path
+        Directory where the pyproject.toml should be created.
+    #>
     param([string]$Path)
 
     if (-not (Test-Path $Path)) {
@@ -734,6 +914,14 @@ strict = false
 }
 
 function Test-ProfileHealth {
+    <#
+    .SYNOPSIS
+        Validates that the PowerShell profile contains all expected sections.
+    .DESCRIPTION
+        Reads $PROFILE and checks for known markers (SSH agent, Chocolatey,
+        fzf, Oh My Posh, etc.). Reports any missing sections and suggests
+        redeploying the profile to fix them.
+    #>
     Write-Step "Profile Health Check"
 
     if (-not (Test-Path $PROFILE)) {
@@ -786,9 +974,6 @@ function Test-ProfileHealth {
         Write-Host "  Run '.\Apply-PowerShellProfile.ps1' to redeploy the full profile." -ForegroundColor Yellow
     }
 }
-
-
-
 
 # =============================================================================
 # Main Execution
@@ -952,10 +1137,6 @@ if ($IncludeOptional) {
     Write-Host "These are normally applied automatically by VS Code Settings Sync and OneDrive." -ForegroundColor DarkGray
     Write-Host "Pass -IncludeOptional to apply them manually as a fallback." -ForegroundColor DarkGray
 }
-
-
-
-
 
 Write-Summary
 Write-Host "`n=== Setup complete ===`n" -ForegroundColor Cyan
