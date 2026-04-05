@@ -45,7 +45,26 @@ function Backup-FileIfExists ($Path) {
         $backup = "$Path.bak-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
         Copy-Item $Path $backup
         Write-Change "Backed up existing file to $backup"
+        Remove-OldBackups -SourceFile $Path -Keep 3
     }
+}
+
+function Remove-OldBackups {
+    <#
+    .SYNOPSIS
+        Removes old .bak-* files, keeping only the most recent N per source file.
+    .PARAMETER SourceFile
+        The original file whose backups should be pruned.
+    .PARAMETER Keep
+        Number of most recent backups to retain. Default 3.
+    #>
+    param([string]$SourceFile, [int]$Keep = 3)
+    $dir  = Split-Path $SourceFile
+    $base = Split-Path $SourceFile -Leaf
+    Get-ChildItem $dir -Filter "$base.bak-*" |
+        Sort-Object Name -Descending |
+        Select-Object -Skip $Keep |
+        Remove-Item -Force -ErrorAction SilentlyContinue
 }
 
 function Write-Summary {
