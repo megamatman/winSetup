@@ -187,11 +187,21 @@ function Update-SinglePackage {
             }
         }
         "module" {
-            $result = pwsh -NoProfile -NonInteractive -Command "
-                Update-Module $($entry.Id) -Force -ErrorAction Stop
-                Write-Output 'SUCCESS'
-            " 2>&1
-            if ($result -contains 'SUCCESS') { Write-Change "$Name updated" } else { Write-Issue "$Name update failed" }
+            # Update-Module fails if the module wasn't installed by Install-Module.
+            # Use version compare + Install-Module -Force instead.
+            $installed = (Get-Module $entry.Id -ListAvailable | Sort-Object Version -Descending | Select-Object -First 1).Version
+            if (-not $installed) { Write-Issue "$Name not installed"; return }
+            try {
+                $available = (Find-Module $entry.Id -ErrorAction Stop).Version
+                if ($installed -lt $available) {
+                    Install-Module $entry.Id -Force -Scope CurrentUser
+                    Write-Change "$Name updated to $available -- restart terminal to apply"
+                } else {
+                    Write-Skip "$Name is already up to date ($installed)" -Track $Name
+                }
+            } catch {
+                Write-Warning "Could not check for $Name updates (PSGallery unreachable?)"
+            }
         }
         "pyenv" {
             if (-not (Test-Path "$env:USERPROFILE\.pyenv")) {
@@ -287,23 +297,24 @@ function Update-All {
         Write-Host "  pipx not found -- skipping" -ForegroundColor DarkGray
     }
 
-    # PSFzf module
+    # PSFzf module -- version compare + Install-Module -Force.
+    # Update-Module fails if the module wasn't installed by Install-Module.
     Write-Section "PowerShell modules"
-    try {
-        $result = pwsh -NoProfile -NonInteractive -Command "
-            Update-Module PSFzf -Force -ErrorAction Stop
-            Write-Output 'SUCCESS'
-        " 2>&1
-
-        if ($result -contains 'SUCCESS') {
-            Write-Change "PSFzf updated"
-        } elseif ($result -match "is not installed") {
-            Write-Host "  PSFzf not installed -- skipping" -ForegroundColor DarkGray
-        } else {
-            Write-Change "PSFzf update attempted -- restart terminal to apply"
+    $psfzfInstalled = (Get-Module PSFzf -ListAvailable | Sort-Object Version -Descending | Select-Object -First 1).Version
+    if (-not $psfzfInstalled) {
+        Write-Host "  PSFzf not installed -- skipping" -ForegroundColor DarkGray
+    } else {
+        try {
+            $psfzfAvailable = (Find-Module PSFzf -ErrorAction Stop).Version
+            if ($psfzfInstalled -lt $psfzfAvailable) {
+                Install-Module PSFzf -Force -Scope CurrentUser
+                Write-Change "PSFzf updated to $psfzfAvailable -- restart terminal to apply"
+            } else {
+                Write-Skip "PSFzf is already up to date ($psfzfInstalled)" -Track "PSFzf"
+            }
+        } catch {
+            Write-Warning "Could not check for PSFzf updates (PSGallery unreachable?)"
         }
-    } catch {
-        Write-Issue "PSFzf update failed -- $($_.Exception.Message)"
     }
 
     # pyenv-win
