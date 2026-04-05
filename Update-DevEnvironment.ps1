@@ -136,8 +136,10 @@ function Update-SinglePackage {
                 return
             }
             # Parse choco output to distinguish "upgraded 0/N" (already current)
-            # from "upgraded N/N" (actually updated).
-            $chocoOut = choco upgrade $entry.Id -y 2>&1 | Out-String
+            # from "upgraded N/N" (actually updated). Filter promotional noise.
+            $chocoOut = choco upgrade $entry.Id -y 2>&1 |
+                Where-Object { "$_" -notmatch 'Did you know|Enjoy using Chocolatey|chocolatey\.org/compare|licensed editions|Your support ensures|nets you some awesome' } |
+                Out-String
             Write-Host $chocoOut
             if ($chocoOut -match 'upgraded (\d+)/\d+ package') {
                 $upgraded = [int]$Matches[1]
@@ -212,7 +214,9 @@ function Update-All {
     if ($isAdmin -and (Get-Command choco -ErrorAction SilentlyContinue)) {
         foreach ($tool in $chocoTools) {
             try {
-                $chocoOut = choco upgrade $tool.Value.Id -y 2>&1 | Out-String
+                $chocoOut = choco upgrade $tool.Value.Id -y 2>&1 |
+                    Where-Object { "$_" -notmatch 'Did you know|Enjoy using Chocolatey|chocolatey\.org/compare|licensed editions|Your support ensures|nets you some awesome' } |
+                    Out-String
                 Write-Host $chocoOut
                 if ($chocoOut -match 'upgraded (\d+)/\d+ package') {
                     if ([int]$Matches[1] -gt 0) { Write-Change "$($tool.Key) updated" }
