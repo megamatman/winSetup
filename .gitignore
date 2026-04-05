@@ -2,6 +2,9 @@
 logs/
 *.bak-*
 CLAUDE.md
+
+# Local-only notes (no-git markdown)
+ng-*.md
 __pycache__/
 .venv/
 *.pyc
