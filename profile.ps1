@@ -160,8 +160,12 @@ function Setup-PythonTools {
         if ($installedPackages -contains $tool.ToLower()) {
             Write-Verbose-Message "$tool : already installed"
         } else {
-            pipx install $tool | Out-Null
-            Write-Change "$tool was not installed -- installed successfully"
+            $null = pipx install $tool 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                Write-Issue "$tool install failed (exit code: $LASTEXITCODE)"
+            } else {
+                Write-Change "$tool was not installed -- installed successfully"
+            }
         }
     }
 

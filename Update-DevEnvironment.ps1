@@ -75,13 +75,15 @@ $PackageRegistry = @{
 function Wait-VSCodeClosed {
     <#
     .SYNOPSIS
-        Blocks execution until all VS Code processes are closed.
+        Blocks execution until all VS Code processes are closed or a timeout expires.
     .DESCRIPTION
         VS Code extensions lock Python tool executables, causing pipx updates to fail.
         This function detects running VS Code instances and waits for the user to close
-        them before allowing updates to proceed.
+        them before allowing updates to proceed. Times out after 5 minutes and prompts
+        the user to continue or cancel.
     #>
     $vscodeProcessNames = @("Code", "Code - Insiders")
+    $timeoutSeconds = 300   # 5 minutes
 
     $running = Get-Process -Name $vscodeProcessNames -ErrorAction SilentlyContinue
     if (-not $running) { return }
@@ -93,18 +95,40 @@ function Wait-VSCodeClosed {
     Write-Host "  open. This causes pipx updates to fail with 'Access is denied'." -ForegroundColor Yellow
     Write-Host ""
     Write-Host "  Please close VS Code, then updates will continue automatically." -ForegroundColor Yellow
-    Write-Host "  Press Ctrl+C to cancel." -ForegroundColor DarkGray
+    Write-Host "  Timeout: $($timeoutSeconds / 60) minutes. Press Ctrl+C to cancel." -ForegroundColor DarkGray
     Write-Host ""
 
     $dots = 0
+    $elapsed = 0
     try {
         while ($true) {
             $running = Get-Process -Name $vscodeProcessNames -ErrorAction SilentlyContinue
             if (-not $running) { break }
 
+            if ($elapsed -ge $timeoutSeconds) {
+                Write-Host "`r                                                      " -NoNewline
+                Write-Host ""
+                Write-Issue "  Timed out waiting for VS Code to close."
+                Write-Host ""
+                Write-Host "  VS Code is still open. Continue anyway? [Y/N] " -ForegroundColor Yellow -NoNewline
+                $answer = Read-Host
+                if ($answer -match '^[Yy]') {
+                    Write-Host "  Continuing with VS Code open. Some updates may fail." -ForegroundColor Yellow
+                    Write-Host ""
+                    return
+                } else {
+                    Write-Host "  Update cancelled." -ForegroundColor Yellow
+                    exit 1
+                }
+            }
+
             $dots = ($dots % 3) + 1
-            Write-Host "`r  Waiting for VS Code to close$('.' * $dots)   " -NoNewline -ForegroundColor DarkGray
+            $remaining = [Math]::Max(0, $timeoutSeconds - $elapsed)
+            $mins = [Math]::Floor($remaining / 60)
+            $secs = $remaining % 60
+            Write-Host "`r  Waiting for VS Code to close$('.' * $dots) (${mins}m ${secs}s remaining)   " -NoNewline -ForegroundColor DarkGray
             Start-Sleep -Seconds 3
+            $elapsed += 3
         }
     } catch [System.Management.Automation.StopProcessingException] {
         Write-Host "`n`n  Update cancelled." -ForegroundColor Yellow

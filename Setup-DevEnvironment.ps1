@@ -1033,7 +1033,7 @@ if ($InstallTool) {
     if (-not $func) {
         $safeName = $InstallTool -replace '[^a-zA-Z0-9]', ''
         $candidate = "Install-$safeName"
-        if (Get-Command $candidate -ErrorAction SilentlyContinue) {
+        if (Get-Command $candidate -CommandType Function -ErrorAction SilentlyContinue) {
             $func = $candidate
         }
     }
