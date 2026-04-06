@@ -139,6 +139,136 @@ function Wait-VSCodeClosed {
     Write-Host ""
 }
 
+# =============================================================================
+# Per-manager update helpers
+#
+# Each returns @{ Status = 'Updated'|'UpToDate'|'Failed'; Output = string; Detail = string }
+# Callers handle Write-Change/Skip/Issue so display names and -Track values
+# remain under their control.
+# =============================================================================
+
+function Invoke-ChocoUpdate {
+    <#
+    .SYNOPSIS
+        Runs choco upgrade for a single package and interprets the result.
+    .PARAMETER Id
+        The Chocolatey package identifier.
+    .OUTPUTS
+        [hashtable] @{ Status; Output; Detail }
+    #>
+    param([string]$Id)
+
+    $chocoOut = choco upgrade $Id -y 2>&1 |
+        Where-Object { "$_" -notmatch 'Did you know|Enjoy using Chocolatey|chocolatey\.org/compare|licensed editions|Your support ensures|nets you some awesome' } |
+        Out-String
+
+    if ($chocoOut -match 'upgraded (\d+)/\d+ package') {
+        if ([int]$Matches[1] -gt 0) {
+            return @{ Status = 'Updated'; Output = $chocoOut; Detail = '' }
+        } else {
+            return @{ Status = 'UpToDate'; Output = $chocoOut; Detail = '' }
+        }
+    } elseif ($LASTEXITCODE -ne 0) {
+        return @{ Status = 'Failed'; Output = $chocoOut; Detail = "exit $LASTEXITCODE" }
+    } else {
+        return @{ Status = 'Updated'; Output = $chocoOut; Detail = '' }
+    }
+}
+
+function Invoke-WingetUpdate {
+    <#
+    .SYNOPSIS
+        Runs winget upgrade for a single package and interprets the result.
+    .PARAMETER Id
+        The winget package identifier (used with --id --exact).
+    .OUTPUTS
+        [hashtable] @{ Status; Output; Detail }
+    #>
+    param([string]$Id)
+
+    $wingetOut = winget upgrade --id $Id --exact --silent --disable-interactivity --accept-package-agreements --accept-source-agreements 2>&1 |
+        Where-Object { "$_" -notmatch '^\s*[-\\|/]+\s*$' -and "$_" -notmatch '^\s*$' } |
+        Out-String
+
+    if ($LASTEXITCODE -eq 0) {
+        return @{ Status = 'Updated'; Output = $wingetOut; Detail = '' }
+    } elseif ($LASTEXITCODE -eq -1978335189 -or $wingetOut -match 'No newer package versions are available') {
+        return @{ Status = 'UpToDate'; Output = $wingetOut; Detail = '' }
+    } else {
+        return @{ Status = 'Failed'; Output = $wingetOut; Detail = "exit $LASTEXITCODE" }
+    }
+}
+
+function Invoke-PipxUpdate {
+    <#
+    .SYNOPSIS
+        Runs pipx upgrade for a single package and interprets the result.
+    .PARAMETER Id
+        The pipx package identifier.
+    .OUTPUTS
+        [hashtable] @{ Status; Output; Detail }
+    #>
+    param([string]$Id)
+
+    $pipxOut = pipx upgrade $Id 2>&1 | Out-String
+
+    if ($pipxOut -match 'already at latest version') {
+        return @{ Status = 'UpToDate'; Output = $pipxOut; Detail = '' }
+    } elseif ($LASTEXITCODE -eq 0) {
+        return @{ Status = 'Updated'; Output = $pipxOut; Detail = '' }
+    } else {
+        return @{ Status = 'Failed'; Output = $pipxOut; Detail = "exit $LASTEXITCODE" }
+    }
+}
+
+function Invoke-ModuleUpdate {
+    <#
+    .SYNOPSIS
+        Checks for a newer version of a PowerShell module and installs it if available.
+    .PARAMETER Id
+        The module name (e.g. PSFzf).
+    .OUTPUTS
+        [hashtable] @{ Status; Output; Detail }
+        Status is 'Updated', 'UpToDate', 'Failed', or 'NotInstalled'.
+    #>
+    param([string]$Id)
+
+    $installed = (Get-Module $Id -ListAvailable | Sort-Object Version -Descending | Select-Object -First 1).Version
+    if (-not $installed) {
+        return @{ Status = 'NotInstalled'; Output = ''; Detail = '' }
+    }
+    try {
+        $available = (Find-Module $Id -ErrorAction Stop).Version
+        if ($installed -lt $available) {
+            Install-Module $Id -Force -Scope CurrentUser
+            return @{ Status = 'Updated'; Output = ''; Detail = "$available" }
+        } else {
+            return @{ Status = 'UpToDate'; Output = ''; Detail = "$installed" }
+        }
+    } catch {
+        return @{ Status = 'Failed'; Output = ''; Detail = "$($_.Exception.Message)" }
+    }
+}
+
+function Invoke-PyenvUpdate {
+    <#
+    .SYNOPSIS
+        Updates pyenv-win via pip install --upgrade.
+    .OUTPUTS
+        [hashtable] @{ Status; Output; Detail }
+    #>
+    $result = pip install pyenv-win --upgrade --target "$env:USERPROFILE\.pyenv\pyenv-win" 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        return @{ Status = 'Updated'; Output = ''; Detail = '' }
+    } else {
+        return @{ Status = 'Failed'; Output = ''; Detail = ($result | Select-Object -Last 3 | Out-String) }
+    }
+}
+
+# =============================================================================
+# Update orchestration
+# =============================================================================
+
 function Update-SinglePackage {
     <#
     .SYNOPSIS
@@ -177,20 +307,12 @@ function Update-SinglePackage {
                 Write-Host "  Chocolatey requires Administrator. Re-run as Administrator." -ForegroundColor Yellow
                 return
             }
-            # Parse choco output to distinguish "upgraded 0/N" (already current)
-            # from "upgraded N/N" (actually updated). Filter promotional noise.
-            $chocoOut = choco upgrade $entry.Id -y 2>&1 |
-                Where-Object { "$_" -notmatch 'Did you know|Enjoy using Chocolatey|chocolatey\.org/compare|licensed editions|Your support ensures|nets you some awesome' } |
-                Out-String
-            Write-Host $chocoOut
-            if ($chocoOut -match 'upgraded (\d+)/\d+ package') {
-                $upgraded = [int]$Matches[1]
-                if ($upgraded -gt 0) { Write-Change "$Name updated" }
-                else { Write-Skip "$Name is already up to date" -Track $Name }
-            } elseif ($LASTEXITCODE -ne 0) {
-                Write-Issue "$Name upgrade failed (exit $LASTEXITCODE)"
-            } else {
-                Write-Change "$Name updated"
+            $r = Invoke-ChocoUpdate -Id $entry.Id
+            Write-Host $r.Output
+            switch ($r.Status) {
+                'Updated'  { Write-Change "$Name updated" }
+                'UpToDate' { Write-Skip "$Name is already up to date" -Track $Name }
+                'Failed'   { Write-Issue "$Name upgrade failed ($($r.Detail))" }
             }
         }
         "winget" {
@@ -198,19 +320,12 @@ function Update-SinglePackage {
                 Write-Issue "winget not found"
                 return
             }
-            # winget returns -1978335189 (0x8A15002B) when no update is available.
-            # This is a success state, not a failure.
-            # Filter spinner/progress lines that survive --silent --disable-interactivity
-            $wingetOut = winget upgrade --id $entry.Id --exact --silent --disable-interactivity --accept-package-agreements --accept-source-agreements 2>&1 |
-                Where-Object { "$_" -notmatch '^\s*[-\\|/]+\s*$' -and "$_" -notmatch '^\s*$' } |
-                Out-String
-            Write-Host $wingetOut
-            if ($LASTEXITCODE -eq 0) {
-                Write-Change "$Name updated"
-            } elseif ($LASTEXITCODE -eq -1978335189 -or $wingetOut -match 'No newer package versions are available') {
-                Write-Skip "$Name is already up to date" -Track $Name
-            } else {
-                Write-Issue "$Name upgrade failed (exit $LASTEXITCODE)"
+            $r = Invoke-WingetUpdate -Id $entry.Id
+            Write-Host $r.Output
+            switch ($r.Status) {
+                'Updated'  { Write-Change "$Name updated" }
+                'UpToDate' { Write-Skip "$Name is already up to date" -Track $Name }
+                'Failed'   { Write-Issue "$Name upgrade failed ($($r.Detail))" }
             }
         }
         "pipx" {
@@ -218,31 +333,21 @@ function Update-SinglePackage {
                 Write-Issue "pipx not found"
                 return
             }
-            $pipxOut = pipx upgrade $entry.Id 2>&1 | Out-String
-            Write-Host $pipxOut
-            if ($pipxOut -match 'already at latest version') {
-                Write-Skip "$Name is already up to date" -Track $Name
-            } elseif ($LASTEXITCODE -eq 0) {
-                Write-Change "$Name updated"
-            } else {
-                Write-Issue "$Name upgrade failed (exit $LASTEXITCODE)"
+            $r = Invoke-PipxUpdate -Id $entry.Id
+            Write-Host $r.Output
+            switch ($r.Status) {
+                'Updated'  { Write-Change "$Name updated" }
+                'UpToDate' { Write-Skip "$Name is already up to date" -Track $Name }
+                'Failed'   { Write-Issue "$Name upgrade failed ($($r.Detail))" }
             }
         }
         "module" {
-            # Update-Module fails if the module wasn't installed by Install-Module.
-            # Use version compare + Install-Module -Force instead.
-            $installed = (Get-Module $entry.Id -ListAvailable | Sort-Object Version -Descending | Select-Object -First 1).Version
-            if (-not $installed) { Write-Issue "$Name not installed"; return }
-            try {
-                $available = (Find-Module $entry.Id -ErrorAction Stop).Version
-                if ($installed -lt $available) {
-                    Install-Module $entry.Id -Force -Scope CurrentUser
-                    Write-Change "$Name updated to $available -- restart terminal to apply"
-                } else {
-                    Write-Skip "$Name is already up to date ($installed)" -Track $Name
-                }
-            } catch {
-                Write-Warning "Could not check for $Name updates (PSGallery unreachable?)"
+            $r = Invoke-ModuleUpdate -Id $entry.Id
+            switch ($r.Status) {
+                'Updated'       { Write-Change "$Name updated to $($r.Detail) -- restart terminal to apply" }
+                'UpToDate'      { Write-Skip "$Name is already up to date ($($r.Detail))" -Track $Name }
+                'NotInstalled'  { Write-Issue "$Name not installed" }
+                'Failed'        { Write-Warning "Could not check for $Name updates (PSGallery unreachable?)" }
             }
         }
         "pyenv" {
@@ -250,8 +355,11 @@ function Update-SinglePackage {
                 Write-Issue "pyenv-win not found"
                 return
             }
-            $null = pip install pyenv-win --upgrade --target "$env:USERPROFILE\.pyenv\pyenv-win" 2>&1
-            if ($LASTEXITCODE -eq 0) { Write-Change "$Name updated" } else { Write-Issue "$Name update failed" }
+            $r = Invoke-PyenvUpdate
+            switch ($r.Status) {
+                'Updated' { Write-Change "$Name updated" }
+                'Failed'  { Write-Issue "$Name update failed" }
+            }
         }
     }
 }
@@ -276,22 +384,17 @@ function Update-All {
     $wingetTools = $PackageRegistry.GetEnumerator() | Where-Object { $_.Value.Manager -eq 'winget' }
     $pipxTools   = $PackageRegistry.GetEnumerator() | Where-Object { $_.Value.Manager -eq 'pipx' }
 
-    # Chocolatey -- parse output to detect "upgraded 0/N" (already current)
+    # Chocolatey
     Write-Section "Chocolatey packages"
     if ($isAdmin -and (Get-Command choco -ErrorAction SilentlyContinue)) {
         foreach ($tool in $chocoTools) {
             try {
-                $chocoOut = choco upgrade $tool.Value.Id -y 2>&1 |
-                    Where-Object { "$_" -notmatch 'Did you know|Enjoy using Chocolatey|chocolatey\.org/compare|licensed editions|Your support ensures|nets you some awesome' } |
-                    Out-String
-                Write-Host $chocoOut
-                if ($chocoOut -match 'upgraded (\d+)/\d+ package') {
-                    if ([int]$Matches[1] -gt 0) { Write-Change "$($tool.Key) updated" }
-                    else { Write-Skip "$($tool.Key) is already up to date" -Track $tool.Key }
-                } elseif ($LASTEXITCODE -ne 0) {
-                    Write-Issue "$($tool.Key) upgrade failed (exit $LASTEXITCODE)"
-                } else {
-                    Write-Change "$($tool.Key) updated"
+                $r = Invoke-ChocoUpdate -Id $tool.Value.Id
+                Write-Host $r.Output
+                switch ($r.Status) {
+                    'Updated'  { Write-Change "$($tool.Key) updated" }
+                    'UpToDate' { Write-Skip "$($tool.Key) is already up to date" -Track $tool.Key }
+                    'Failed'   { Write-Issue "$($tool.Key) upgrade failed ($($r.Detail))" }
                 }
             } catch {
                 Write-Issue "$($tool.Key) upgrade failed -- $($_.Exception.Message)"
@@ -301,21 +404,17 @@ function Update-All {
         Write-Host "  Skipped (requires Administrator)" -ForegroundColor DarkGray
     }
 
-    # winget -- use --exact flag. Exit -1978335189 means "no update available".
+    # winget
     Write-Section "winget packages"
     if (Get-Command winget -ErrorAction SilentlyContinue) {
         foreach ($tool in $wingetTools) {
             try {
-                $wingetOut = winget upgrade --id $tool.Value.Id --exact --silent --disable-interactivity --accept-package-agreements --accept-source-agreements 2>&1 |
-                    Where-Object { "$_" -notmatch '^\s*[-\\|/]+\s*$' -and "$_" -notmatch '^\s*$' } |
-                    Out-String
-                Write-Host $wingetOut
-                if ($LASTEXITCODE -eq 0) {
-                    Write-Change "$($tool.Key) updated"
-                } elseif ($LASTEXITCODE -eq -1978335189 -or $wingetOut -match 'No newer package versions are available') {
-                    Write-Skip "$($tool.Key) is already up to date" -Track $tool.Key
-                } else {
-                    Write-Issue "$($tool.Key) upgrade failed (exit $LASTEXITCODE)"
+                $r = Invoke-WingetUpdate -Id $tool.Value.Id
+                Write-Host $r.Output
+                switch ($r.Status) {
+                    'Updated'  { Write-Change "$($tool.Key) updated" }
+                    'UpToDate' { Write-Skip "$($tool.Key) is already up to date" -Track $tool.Key }
+                    'Failed'   { Write-Issue "$($tool.Key) upgrade failed ($($r.Detail))" }
                 }
             } catch {
                 Write-Issue "$($tool.Key) upgrade failed -- $($_.Exception.Message)"
@@ -330,14 +429,12 @@ function Update-All {
     if (Get-Command pipx -ErrorAction SilentlyContinue) {
         foreach ($tool in $pipxTools) {
             try {
-                $pipxOut = pipx upgrade $tool.Value.Id 2>&1 | Out-String
-                Write-Host $pipxOut
-                if ($pipxOut -match 'already at latest version') {
-                    Write-Skip "$($tool.Key) is already up to date" -Track $tool.Key
-                } elseif ($LASTEXITCODE -eq 0) {
-                    Write-Change "$($tool.Key) updated"
-                } else {
-                    Write-Issue "$($tool.Key) upgrade failed (exit $LASTEXITCODE)"
+                $r = Invoke-PipxUpdate -Id $tool.Value.Id
+                Write-Host $r.Output
+                switch ($r.Status) {
+                    'Updated'  { Write-Change "$($tool.Key) updated" }
+                    'UpToDate' { Write-Skip "$($tool.Key) is already up to date" -Track $tool.Key }
+                    'Failed'   { Write-Issue "$($tool.Key) upgrade failed ($($r.Detail))" }
                 }
             } catch {
                 Write-Issue "$($tool.Key) upgrade failed -- $($_.Exception.Message)"
@@ -347,24 +444,14 @@ function Update-All {
         Write-Host "  pipx not found -- skipping" -ForegroundColor DarkGray
     }
 
-    # PSFzf module -- version compare + Install-Module -Force.
-    # Update-Module fails if the module wasn't installed by Install-Module.
+    # PSFzf module
     Write-Section "PowerShell modules"
-    $psfzfInstalled = (Get-Module PSFzf -ListAvailable | Sort-Object Version -Descending | Select-Object -First 1).Version
-    if (-not $psfzfInstalled) {
-        Write-Host "  PSFzf not installed -- skipping" -ForegroundColor DarkGray
-    } else {
-        try {
-            $psfzfAvailable = (Find-Module PSFzf -ErrorAction Stop).Version
-            if ($psfzfInstalled -lt $psfzfAvailable) {
-                Install-Module PSFzf -Force -Scope CurrentUser
-                Write-Change "PSFzf updated to $psfzfAvailable -- restart terminal to apply"
-            } else {
-                Write-Skip "PSFzf is already up to date ($psfzfInstalled)" -Track "PSFzf"
-            }
-        } catch {
-            Write-Warning "Could not check for PSFzf updates (PSGallery unreachable?)"
-        }
+    $r = Invoke-ModuleUpdate -Id 'PSFzf'
+    switch ($r.Status) {
+        'Updated'       { Write-Change "PSFzf updated to $($r.Detail) -- restart terminal to apply" }
+        'UpToDate'      { Write-Skip "PSFzf is already up to date ($($r.Detail))" -Track "PSFzf" }
+        'NotInstalled'  { Write-Host "  PSFzf not installed -- skipping" -ForegroundColor DarkGray }
+        'Failed'        { Write-Warning "Could not check for PSFzf updates (PSGallery unreachable?)" }
     }
 
     # pyenv-win
@@ -373,11 +460,10 @@ function Update-All {
         try {
             # pyenv's built-in 'pyenv update' uses a VBScript with an ActiveX
             # HTML component that fails on modern Windows 11. Update via pip instead.
-            $result = pip install pyenv-win --upgrade --target "$env:USERPROFILE\.pyenv\pyenv-win" 2>&1
-            if ($LASTEXITCODE -eq 0) {
-                Write-Change "pyenv-win updated"
-            } else {
-                Write-Issue "pyenv-win update failed -- $($result | Select-Object -Last 3 | Out-String)"
+            $r = Invoke-PyenvUpdate
+            switch ($r.Status) {
+                'Updated' { Write-Change "pyenv-win updated" }
+                'Failed'  { Write-Issue "pyenv-win update failed -- $($r.Detail)" }
             }
         } catch {
             Write-Issue "pyenv-win update failed -- $($_.Exception.Message)"
