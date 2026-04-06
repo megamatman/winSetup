@@ -220,16 +220,4 @@ bat .gitignore
 
 ## What comes next
 
-You've completed all ten tutorials. You can now:
-
-- **Navigate** with zoxide, fd, and fzf (Tutorials 1-2)
-- **Search** with ripgrep and interactive filtering (Tutorial 3)
-- **Work fast** with PSReadLine, history search, and fuzzy completion (Tutorial 4)
-- **Write quality Python** with venvs, linters, and formatters (Tutorial 5)
-- **Bridge terminal and editor** with VS Code CLI integration (Tutorial 6)
-- **Manage Python versions** with pyenv-win (Tutorial 7)
-- **Use git professionally** with lazygit, delta, and signed commits (Tutorial 8)
-- **Scaffold projects** with templates and pre-commit hooks (Tutorial 9)
-- **Maintain security hygiene** with global .gitignore, bandit, and signing verification (Tutorial 10)
-
-The [HowTo-Guides](../HowTo-Guides/) cover each tool in more depth. The [Cheatsheets](../Cheatsheets/) give you quick-reference tables. And every tool has `--help` when you need specifics.
+You've completed all ten solo tutorials. **Tutorial 11** covers the team dimension -- branches, PRs, code review, and conflict resolution. After that, all eleven tutorials are complete.

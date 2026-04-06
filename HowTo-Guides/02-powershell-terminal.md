@@ -98,11 +98,17 @@ This works for commands, parameters, file paths, and git branches -- anything Po
 
 ## Oh My Posh -- Prompt Customisation
 
-Oh My Posh replaces the default `PS C:\>` prompt with a themed, information-rich prompt. Your profile uses the `gruvbox` theme:
+Oh My Posh replaces the default `PS C:\>` prompt with a themed, information-rich prompt. Your profile uses a managed copy of the `gruvbox` theme from the winSetup configs directory:
 
 ```powershell
-oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH\gruvbox.omp.json" | Invoke-Expression
+$ompTheme = if ($env:WINSETUP) { "$env:WINSETUP\configs\gruvbox.omp.json" } else { $null }
+if (-not $ompTheme -or -not (Test-Path $ompTheme)) {
+    $ompTheme = "$env:POSH_THEMES_PATH\gruvbox.omp.json"
+}
+oh-my-posh init pwsh --config $ompTheme | Invoke-Expression
 ```
+
+The primary path is `$env:WINSETUP\configs\gruvbox.omp.json`. If `$env:WINSETUP` is not set (e.g. before the setup script has been run), the profile falls back to the built-in Oh My Posh theme at `$env:POSH_THEMES_PATH`. To customise the theme, edit `configs/gruvbox.omp.json` in the winSetup repo.
 
 The prompt shows:
 - Current directory

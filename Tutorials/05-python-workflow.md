@@ -60,7 +60,7 @@ __pycache__/
 Use the setup script's built-in scaffolding:
 
 ```powershell
-Setup-DevEnvironment.ps1 -ScaffoldPyproject "."
+& "$env:WINSETUP\Setup-DevEnvironment.ps1" -ScaffoldPyproject "."
 ```
 
 This creates a `pyproject.toml` with Ruff and Mypy configuration.

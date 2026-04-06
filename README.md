@@ -77,6 +77,7 @@ These are normally handled by VS Code Settings Sync (via GitHub) and OneDrive. U
 | `Apply-VSCodeSettings.ps1` | VS Code settings and extensions | `-SettingsOnly`, `-ExtensionsOnly` |
 | `Apply-PowerShellProfile.ps1` | Deploys `profile.ps1` to `$PROFILE` | none |
 | `Update-DevEnvironment.ps1` | Update all tools to latest versions | requires Admin for Chocolatey |
+| `Uninstall-Tool.ps1` | Remove a tool from the machine and from winSetup management | `-Tool <name>`, `-KeepFiles` |
 | `profile.ps1` | Canonical PowerShell profile source (single source of truth) | -- |
 | `Helpers.ps1` | Shared helper functions (dot-sourced by all scripts) | -- |
 

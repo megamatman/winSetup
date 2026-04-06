@@ -155,15 +155,4 @@ Repeat this process without referring to the tutorial. Each time you do it, it w
 
 ## What comes next
 
-You've scaffolded a project with all the quality tools in place. **Tutorial 10** covers the security side -- verifying your global .gitignore works, scanning for secrets, and responding when one leaks. After that, all ten tutorials are complete. Here's what you've covered:
-
-- **Navigate** with zoxide, fd, and fzf (Tutorials 1-2)
-- **Search** with ripgrep and interactive filtering (Tutorial 3)
-- **Work fast** with PSReadLine, history search, and fuzzy completion (Tutorial 4)
-- **Write quality Python** with venvs, linters, and formatters (Tutorial 5)
-- **Bridge terminal and editor** with VS Code CLI integration (Tutorial 6)
-- **Manage Python versions** with pyenv-win (Tutorial 7)
-- **Use git professionally** with lazygit, delta, and signed commits (Tutorial 8)
-- **Scaffold projects** with templates and pre-commit hooks (Tutorial 9)
-
-The HowTo-Guides in this repo cover each tool in more depth. The Cheatsheets give you quick-reference tables. And every tool has `--help` when you need specifics.
+You've scaffolded a project with all the quality tools in place. **Tutorial 10** covers the security side -- verifying your global .gitignore works, scanning for secrets, and responding when one leaks. **Tutorial 11** covers team collaboration -- branches, PRs, code review, and conflict resolution.

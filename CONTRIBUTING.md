@@ -16,8 +16,11 @@
 To add a new tool to the setup, change these files in order:
 
 1. **`Setup-DevEnvironment.ps1`**: add an install function (or add to `Install-CLITools`'s `$tools` array). Add the function call to the main execution block. Increment `$CoreSteps`.
-2. **`profile.ps1`**: add any aliases, environment variables, or config. Add the tool to `Show-DevEnvironment`'s `$tools` hashtable. Add to `Test-ProfileHealth`'s `expectedSections` if the profile section is worth checking.
-3. **`README.md`**: add a row to the "What Gets Installed" table.
+2. **`Update-DevEnvironment.ps1`**: add an entry to `$PackageRegistry` so the tool is included in update runs. Format: `"<key>" = @{ Manager = "<manager>"; Id = "<package-id>" }`. See INTERFACE.md for allowed Manager values.
+3. **`profile.ps1`**: add any aliases, environment variables, or config. Add the tool to `Show-DevEnvironment`'s `$tools` hashtable. Add to `Test-ProfileHealth`'s `expectedSections` if the profile section is worth checking.
+4. **`README.md`**: add a row to the "What Gets Installed" table.
+
+The Add Tool wizard in [winTerface](https://github.com/megamatman/winTerface) automates steps 1 and 2.
 
 If the tool is a pipx package, add it to the `$tools` array in `Setup-PythonTools` (in both `Setup-DevEnvironment.ps1` and `profile.ps1`).
 
@@ -43,8 +46,10 @@ All shared output functions live in `Helpers.ps1`:
 - `Write-Change`: green, something was installed or configured
 - `Write-Skip`: grey, already present
 - `Write-Issue`: red, something failed
-- `Write-Step`: cyan, section header with step counter
+- `Write-Step`: cyan, numbered step header with progress counter
+- `Write-Section`: cyan, section banner for grouped output (used by Update-DevEnvironment.ps1)
 - `Backup-FileIfExists`: backs up a file before overwriting
+- `Remove-OldBackups`: prunes .bak-* files, keeping the most recent N per source file
 - `Update-SessionPath`: reloads PATH from the registry
 - `Write-Summary`: prints installed/skipped/failed summary
 
