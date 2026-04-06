@@ -260,6 +260,14 @@ The script defaults to `id_ed25519`. If you used a different type (e.g. `id_rsa`
 | `Cheatsheets/` | One-page quick-reference tables for every tool and capability |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to add tools, edit the profile, and contribute to this repo |
 
+## Interface Contract
+
+winSetup exposes a stable interface for consumers such as [winTerface](https://github.com/megamatman/winTerface). The full specification is in [INTERFACE.md](INTERFACE.md).
+
+**Current contract version: 1** (defined as `$script:ContractVersion` in `Setup-DevEnvironment.ps1`).
+
+The contract covers: `$PackageRegistry` format, `Install-*` function naming, `$CoreSteps` semantics, profile section comment patterns, and the `-InstallTool` parameter dispatch. See INTERFACE.md for what constitutes a breaking vs non-breaking change.
+
 ### Where Things Live
 
 | What | Where |
