@@ -1,6 +1,6 @@
 # Release Notes: v1.0.0
 
-Released: 2026-03-31
+Released: 2026-04-06
 
 ## What this is
 
@@ -33,24 +33,30 @@ detect-private-key hook
 
 | File | Purpose |
 |---|---|
-| `Setup-DevEnvironment.ps1` | Full environment setup |
+| `Setup-DevEnvironment.ps1` | Full environment setup (`-WhatIf` for dry run, `-InstallTool` for single tools) |
+| `Update-DevEnvironment.ps1` | Keep all tools up to date (per-package or full update) |
+| `Uninstall-Tool.ps1` | Remove a tool from the machine and from winSetup management |
 | `Apply-VSCodeSettings.ps1` | VS Code settings and extensions |
 | `Apply-PowerShellProfile.ps1` | PowerShell profile deployment |
-| `Update-DevEnvironment.ps1` | Keep all tools up to date |
 | `Helpers.ps1` | Shared helper functions (dot-sourced by all scripts) |
 | `profile.ps1` | Canonical PowerShell profile source |
 | `Hack.zip` | Hack Nerd Font (bundled) |
+| `configs/` | Oh My Posh theme and VS Code settings (single source of truth) |
 | `templates/` | Pre-commit config and Python project template |
+| `tests/` | Pester test suite (7 files, 131 tests) |
+| `INTERFACE.md` | Versioned interface contract for consumers (e.g. winTerface) |
 
 ## Documentation
 
-| Directory | Contents |
+| Document | Contents |
 |---|---|
 | `HowTo-Guides/` | Reference guides for every installed tool |
 | `Tutorials/` | Eleven progressive tutorials from first terminal open to team workflow |
 | `Cheatsheets/` | Quick-reference command tables for every tool |
 | `TROUBLESHOOTING.md` | Symptom-first troubleshooting for 40+ common problems |
 | `QUICK-REFERENCE.md` | Single-page task navigator |
+| `CONTRIBUTING.md` | How to add tools, edit the profile, and contribute |
+| `INTERFACE.md` | Stable interface contract for consumers (contract version 1) |
 
 ## Requirements
 
@@ -66,8 +72,10 @@ detect-private-key hook
   Chocolatey bootstrap or winget. No automated fallback exists for these.
 - `Setup-PythonTools` runs on every terminal open (with a daily check).
   On machines without Python this produces a warning until setup is run.
-- The step counter in `Setup-DevEnvironment.ps1` is a hardcoded constant
-  that must be manually updated if steps are added or removed.
+- The step counter (`$CoreSteps`) in `Setup-DevEnvironment.ps1` is a
+  hardcoded constant that must be manually updated if steps are added or
+  removed. A Pester regression test validates the count, and
+  `Uninstall-Tool.ps1` decrements it automatically via AST parsing.
 
 ## Quick start
 
