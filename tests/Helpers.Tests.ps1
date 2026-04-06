@@ -147,6 +147,107 @@ Describe 'Write-Summary' {
     }
 }
 
+Describe 'Update-SessionPath merge logic' {
+    # Update-SessionPath reads Machine and User PATH from the registry via
+    # [System.Environment]::GetEnvironmentVariable, which is a static .NET
+    # method that Pester cannot mock. These tests exercise the merge algorithm
+    # inline with controlled inputs, matching the test convention used
+    # elsewhere in this file.
+
+    It 'merges Machine and User PATH entries into $env:PATH' {
+        $machinePath = 'C:\Windows\System32;C:\Windows'
+        $userPath    = 'C:\Users\test\.local\bin;C:\Users\test\AppData'
+        $sessionPath = 'C:\Windows\System32'
+
+        $registryPaths = "$machinePath;$userPath" -split ';' | Where-Object { $_ }
+        $sessionPaths  = $sessionPath -split ';' | Where-Object { $_ }
+        $merged = ($sessionPaths + $registryPaths | Select-Object -Unique) -join ';'
+
+        $merged | Should -Match 'C:\\Windows\\System32'
+        $merged | Should -Match 'C:\\Windows'
+        $merged | Should -Match 'C:\\Users\\test\\\.local\\bin'
+        $merged | Should -Match 'C:\\Users\\test\\AppData'
+    }
+
+    It 'deduplicates entries that appear in both session and registry PATH' {
+        $machinePath = 'C:\Windows\System32;C:\Windows'
+        $userPath    = 'C:\Users\test\bin'
+        # Session already has one entry from Machine PATH
+        $sessionPath = 'C:\Windows\System32;C:\MyTool'
+
+        $registryPaths = "$machinePath;$userPath" -split ';' | Where-Object { $_ }
+        $sessionPaths  = $sessionPath -split ';' | Where-Object { $_ }
+        $merged = ($sessionPaths + $registryPaths | Select-Object -Unique) -join ';'
+
+        # Count occurrences of the duplicate entry
+        $entries = $merged -split ';'
+        ($entries | Where-Object { $_ -eq 'C:\Windows\System32' }).Count | Should -Be 1
+    }
+
+    It 'handles empty Machine PATH without artefacts' {
+        $machinePath = ''
+        $userPath    = 'C:\Users\test\bin;C:\Users\test\scripts'
+        $sessionPath = 'C:\Existing'
+
+        $registryPaths = "$machinePath;$userPath" -split ';' | Where-Object { $_ }
+        $sessionPaths  = $sessionPath -split ';' | Where-Object { $_ }
+        $merged = ($sessionPaths + $registryPaths | Select-Object -Unique) -join ';'
+
+        $merged | Should -Not -Match '^;'
+        $merged | Should -Not -Match ';$'
+        $merged | Should -Not -Match ';;'
+        $merged | Should -Match 'C:\\Users\\test\\bin'
+        $merged | Should -Match 'C:\\Existing'
+    }
+
+    It 'handles empty User PATH without artefacts' {
+        $machinePath = 'C:\Windows\System32;C:\Windows'
+        $userPath    = ''
+        $sessionPath = 'C:\Existing'
+
+        $registryPaths = "$machinePath;$userPath" -split ';' | Where-Object { $_ }
+        $sessionPaths  = $sessionPath -split ';' | Where-Object { $_ }
+        $merged = ($sessionPaths + $registryPaths | Select-Object -Unique) -join ';'
+
+        $merged | Should -Not -Match '^;'
+        $merged | Should -Not -Match ';$'
+        $merged | Should -Not -Match ';;'
+        $merged | Should -Match 'C:\\Windows\\System32'
+    }
+
+    It 'produces empty result when all sources are empty' {
+        $machinePath = ''
+        $userPath    = ''
+        $sessionPath = ''
+
+        $registryPaths = "$machinePath;$userPath" -split ';' | Where-Object { $_ }
+        $sessionPaths  = $sessionPath -split ';' | Where-Object { $_ }
+        $merged = ($sessionPaths + $registryPaths | Select-Object -Unique) -join ';'
+
+        $merged | Should -BeNullOrEmpty
+    }
+
+    It 'preserves session-only entries not in Machine or User PATH' {
+        # Session-only entries (e.g. from a venv activation) must survive
+        # the merge. The algorithm puts $sessionPaths first, then appends
+        # $registryPaths, and Select-Object -Unique keeps first occurrence.
+        $machinePath = 'C:\Windows\System32'
+        $userPath    = 'C:\Users\test\bin'
+        $sessionPath = 'C:\MyProject\.venv\Scripts;C:\Windows\System32'
+
+        $registryPaths = "$machinePath;$userPath" -split ';' | Where-Object { $_ }
+        $sessionPaths  = $sessionPath -split ';' | Where-Object { $_ }
+        $merged = ($sessionPaths + $registryPaths | Select-Object -Unique) -join ';'
+
+        $entries = $merged -split ';'
+        $entries | Should -Contain 'C:\MyProject\.venv\Scripts'
+        # Session-only entry should appear before registry-only entries
+        $venvIdx = [array]::IndexOf($entries, 'C:\MyProject\.venv\Scripts')
+        $userIdx = [array]::IndexOf($entries, 'C:\Users\test\bin')
+        $venvIdx | Should -BeLessThan $userIdx
+    }
+}
+
 Describe 'Backup-FileIfExists' {
     It 'creates backup with correct filename pattern' {
         Mock Write-Host {}
