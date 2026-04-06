@@ -15,6 +15,59 @@ BeforeAll {
 # ---------------------------------------------------------------------------
 
 Describe 'Step 2: Remove Install-* function from Setup-DevEnvironment.ps1' {
+    BeforeAll {
+    # Helper that mirrors the AST-based removal logic from Uninstall-Tool.ps1
+    # Step 2. Accepts the file path and tool name, returns whether anything
+    # was removed.
+    function Invoke-AstFunctionRemoval {
+        param([string]$FilePath, [string]$Tool)
+
+        $content  = Get-Content $FilePath -Raw
+        $safeName = $Tool -replace '[^a-zA-Z0-9]', ''
+        $funcName = "Install-$safeName"
+
+        $tokens = $null; $parseErrors = $null
+        $ast = [System.Management.Automation.Language.Parser]::ParseInput(
+            $content, [ref]$tokens, [ref]$parseErrors)
+        $funcAst = $ast.FindAll({
+            param($node)
+            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $node.Name -eq $funcName
+        }, $true) | Select-Object -First 1
+
+        $removed = $false
+        if ($funcAst) {
+            $start = $funcAst.Extent.StartOffset
+            $end   = $funcAst.Extent.EndOffset
+            if ($start -ge 2 -and $content.Substring($start - 2, 2) -eq "`r`n") {
+                $start -= 2
+            } elseif ($start -ge 1 -and $content[$start - 1] -eq "`n") {
+                $start -= 1
+            }
+            $content = $content.Substring(0, $start) + $content.Substring($end)
+            $removed = $true
+        }
+
+        $lines = $content -split "`r?`n"
+        $newLines = @()
+        foreach ($l in $lines) {
+            if ($l -match "^Install-$safeName\s*$") { $removed = $true; continue }
+            $newLines += $l
+        }
+
+        if ($removed) {
+            $newLines = $newLines | ForEach-Object {
+                if ($_ -match '^\$CoreSteps\s*=\s*(\d+)') {
+                    $_ -replace '\d+', ([int]$Matches[1] - 1)
+                } else { $_ }
+            }
+        }
+
+        $newLines | Set-Content $FilePath -Encoding UTF8
+        return $removed
+    }
+    }
+
     BeforeEach {
         $setupContent = @'
 $CoreSteps = 5
@@ -49,25 +102,7 @@ Write-Summary
     }
 
     It 'removes the Install-* function block for the named tool' {
-        $Tool = 'ruff'
-        $safeName = $Tool -replace '[^a-zA-Z0-9]', ''
-        $lines = @(Get-Content $script:setupFile)
-        $newLines = @()
-        $inFunc = $false; $braceDepth = 0; $removed = $false
-        foreach ($l in $lines) {
-            if (-not $inFunc -and $l -match "^\s*function\s+Install-$safeName\s*\{") {
-                $inFunc = $true; $braceDepth = 1; $removed = $true; continue
-            }
-            if ($inFunc) {
-                $braceDepth += ([char[]]$l | Where-Object { $_ -eq '{' }).Count
-                $braceDepth -= ([char[]]$l | Where-Object { $_ -eq '}' }).Count
-                if ($braceDepth -le 0) { $inFunc = $false }
-                continue
-            }
-            if ($l -match "^Install-$safeName\s*$") { $removed = $true; continue }
-            $newLines += $l
-        }
-        $newLines | Set-Content $script:setupFile -Encoding UTF8
+        Invoke-AstFunctionRemoval -FilePath $script:setupFile -Tool 'ruff'
 
         $result = Get-Content $script:setupFile -Raw
         $result | Should -Not -Match 'Install-ruff'
@@ -76,25 +111,7 @@ Write-Summary
     }
 
     It 'does not remove unrelated functions' {
-        $Tool = 'ruff'
-        $safeName = $Tool -replace '[^a-zA-Z0-9]', ''
-        $lines = @(Get-Content $script:setupFile)
-        $newLines = @()
-        $inFunc = $false; $braceDepth = 0
-        foreach ($l in $lines) {
-            if (-not $inFunc -and $l -match "^\s*function\s+Install-$safeName\s*\{") {
-                $inFunc = $true; $braceDepth = 1; continue
-            }
-            if ($inFunc) {
-                $braceDepth += ([char[]]$l | Where-Object { $_ -eq '{' }).Count
-                $braceDepth -= ([char[]]$l | Where-Object { $_ -eq '}' }).Count
-                if ($braceDepth -le 0) { $inFunc = $false }
-                continue
-            }
-            if ($l -match "^Install-$safeName\s*$") { continue }
-            $newLines += $l
-        }
-        $newLines | Set-Content $script:setupFile -Encoding UTF8
+        Invoke-AstFunctionRemoval -FilePath $script:setupFile -Tool 'ruff'
 
         $result = Get-Content $script:setupFile -Raw
         $result | Should -Match 'function Install-Chocolatey'
@@ -104,32 +121,7 @@ Write-Summary
     }
 
     It 'decrements $CoreSteps when a function is removed' {
-        $Tool = 'ruff'
-        $safeName = $Tool -replace '[^a-zA-Z0-9]', ''
-        $lines = @(Get-Content $script:setupFile)
-        $newLines = @()
-        $inFunc = $false; $braceDepth = 0; $removed = $false
-        foreach ($l in $lines) {
-            if (-not $inFunc -and $l -match "^\s*function\s+Install-$safeName\s*\{") {
-                $inFunc = $true; $braceDepth = 1; $removed = $true; continue
-            }
-            if ($inFunc) {
-                $braceDepth += ([char[]]$l | Where-Object { $_ -eq '{' }).Count
-                $braceDepth -= ([char[]]$l | Where-Object { $_ -eq '}' }).Count
-                if ($braceDepth -le 0) { $inFunc = $false }
-                continue
-            }
-            if ($l -match "^Install-$safeName\s*$") { $removed = $true; continue }
-            $newLines += $l
-        }
-        if ($removed) {
-            $newLines = $newLines | ForEach-Object {
-                if ($_ -match '^\$CoreSteps\s*=\s*(\d+)') {
-                    $_ -replace '\d+', ([int]$Matches[1] - 1)
-                } else { $_ }
-            }
-        }
-        $newLines | Set-Content $script:setupFile -Encoding UTF8
+        Invoke-AstFunctionRemoval -FilePath $script:setupFile -Tool 'ruff'
 
         $result = Get-Content $script:setupFile -Raw
         $result | Should -Match '\$CoreSteps\s*=\s*4'
@@ -141,33 +133,52 @@ Write-Summary
         $backups.Count | Should -BeGreaterOrEqual 1
     }
 
-    It 'handles tool name with regex metacharacters without corrupting file' {
-        # Tool name like "test.tool" contains a regex dot metacharacter
-        $Tool = 'test.tool'
-        $safeName = $Tool -replace '[^a-zA-Z0-9]', ''
-        $lines = @(Get-Content $script:setupFile)
-        $newLines = @()
-        $inFunc = $false; $braceDepth = 0
-        foreach ($l in $lines) {
-            if (-not $inFunc -and $l -match "^\s*function\s+Install-$safeName\s*\{") {
-                $inFunc = $true; $braceDepth = 1; continue
-            }
-            if ($inFunc) {
-                $braceDepth += ([char[]]$l | Where-Object { $_ -eq '{' }).Count
-                $braceDepth -= ([char[]]$l | Where-Object { $_ -eq '}' }).Count
-                if ($braceDepth -le 0) { $inFunc = $false }
-                continue
-            }
-            if ($l -match "^Install-$safeName\s*$") { continue }
-            $newLines += $l
-        }
-        $newLines | Set-Content $script:setupFile -Encoding UTF8
+    It 'handles tool name with no matching function without corrupting file' {
+        # "test.tool" sanitises to "testtool" -- no Install-testtool function exists
+        Invoke-AstFunctionRemoval -FilePath $script:setupFile -Tool 'test.tool'
 
-        # Original content should be intact (no Install-testtool function to remove)
         $result = Get-Content $script:setupFile -Raw
         $result | Should -Match 'function Install-Chocolatey'
         $result | Should -Match 'function Install-ruff'
         $result | Should -Match 'function Install-delta'
+    }
+
+    It 'correctly removes a function containing braces in a string literal' {
+        # The old brace-counting approach would miscount braces inside strings.
+        # AST parsing handles this correctly.
+        $contentWithBraces = @'
+$CoreSteps = 3
+
+function Install-Chocolatey {
+    Write-Step 'Chocolatey'
+}
+
+function Install-tricky {
+    Write-Step 'tricky'
+    $msg = "braces in string: { } { nested { } }"
+    Write-Host $msg
+}
+
+function Install-delta {
+    Write-Step 'delta'
+}
+
+# Main Execution
+Install-Chocolatey
+Install-tricky
+Install-delta
+Write-Summary
+'@
+        Set-Content -Path $script:setupFile -Value $contentWithBraces
+
+        Invoke-AstFunctionRemoval -FilePath $script:setupFile -Tool 'tricky'
+
+        $result = Get-Content $script:setupFile -Raw
+        $result | Should -Not -Match 'Install-tricky'
+        $result | Should -Not -Match 'braces in string'
+        $result | Should -Match 'function Install-Chocolatey'
+        $result | Should -Match 'function Install-delta'
+        $result | Should -Match '\$CoreSteps\s*=\s*2'
     }
 }
 

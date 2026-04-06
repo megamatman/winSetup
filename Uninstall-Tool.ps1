@@ -145,25 +145,44 @@ Write-Host "`n[2/5] Remove from Setup-DevEnvironment.ps1" -ForegroundColor Cyan
 $setupPath = Join-Path $PSScriptRoot 'Setup-DevEnvironment.ps1'
 try {
     Backup-FileIfExists $setupPath
-    $lines = @(Get-Content $setupPath)
+    $content  = Get-Content $setupPath -Raw
     $safeName = ($Tool -replace '[^a-zA-Z0-9]', '')
+    $funcName = "Install-$safeName"
 
-    # Find and remove function block + its call
+    # Use the PowerShell AST to find the exact extent of the function.
+    # This is correct even when braces appear inside string literals or
+    # here-strings, which the previous brace-counting approach could miscount.
+    $tokens = $null; $parseErrors = $null
+    $ast = [System.Management.Automation.Language.Parser]::ParseInput(
+        $content, [ref]$tokens, [ref]$parseErrors)
+    $funcAst = $ast.FindAll({
+        param($node)
+        $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+        $node.Name -eq $funcName
+    }, $true) | Select-Object -First 1
+
+    $removed = $false
+    if ($funcAst) {
+        $start = $funcAst.Extent.StartOffset
+        $end   = $funcAst.Extent.EndOffset
+
+        # Strip one preceding newline to avoid leaving a double-blank gap
+        if ($start -ge 2 -and $content.Substring($start - 2, 2) -eq "`r`n") {
+            $start -= 2
+        } elseif ($start -ge 1 -and $content[$start - 1] -eq "`n") {
+            $start -= 1
+        }
+
+        $content = $content.Substring(0, $start) + $content.Substring($end)
+        $removed = $true
+    }
+
+    # Remove the function call line from the main execution block.
+    # Match only unindented calls (column 0) to avoid touching the
+    # -InstallTool short-circuit block.
+    $lines = $content -split "`r?`n"
     $newLines = @()
-    $inFunc = $false; $braceDepth = 0; $removed = $false
     foreach ($l in $lines) {
-        if (-not $inFunc -and $l -match "^\s*function\s+Install-$safeName\s*\{") {
-            $inFunc = $true; $braceDepth = 1; $removed = $true; continue
-        }
-        if ($inFunc) {
-            $braceDepth += ([char[]]$l | Where-Object { $_ -eq '{' }).Count
-            $braceDepth -= ([char[]]$l | Where-Object { $_ -eq '}' }).Count
-            if ($braceDepth -le 0) { $inFunc = $false }
-            continue
-        }
-        # Remove the function call line from the main execution block.
-        # Match only unindented calls (column 0) to avoid touching the
-        # -InstallTool short-circuit block.
         if ($l -match "^Install-$safeName\s*$") { $removed = $true; continue }
         $newLines += $l
     }
