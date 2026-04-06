@@ -2,7 +2,7 @@
 
 One script to set up a complete Windows 11 development environment. Safe to re-run -- skips anything already installed.
 
-> **Looking for the terminal UI?** [winTerface](https://github.com/megamatman/winTerface) provides a keyboard-driven TUI for managing your winSetup environment — install, update, and remove tools, check profile health, and run updates without memorising commands.
+> **Looking for the terminal UI?** [winTerface](https://github.com/megamatman/winTerface) provides a keyboard-driven TUI for managing your winSetup environment: install, update, and remove tools, check profile health, and run updates without memorising commands.
 
 ## Prerequisites
 
