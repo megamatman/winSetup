@@ -34,67 +34,14 @@ function Invoke-VSCodeSettingsDeploy {
     if (-not (Test-Path $settingsDir)) { New-Item -ItemType Directory -Path $settingsDir -Force | Out-Null }
     $settingsPath = Join-Path $settingsDir "settings.json"
 
-    $content = @'
-{
-  // Language servers
-  "python.languageServer": "Pylance",
-
-  // Editor
-  "editor.tabSize": 2,
-  "editor.defaultFormatter": "esbenp.prettier-vscode",
-  "editor.formatOnSave": true,
-  "editor.fontFamily": "'Hack Nerd Font', Consolas, 'Courier New', monospace",
-  "editor.fontLigatures": true,
-  "editor.rulers": [88],
-  "editor.minimap.enabled": false,
-  "editor.bracketPairColorization.enabled": true,
-  "editor.guides.bracketPairs": true,
-  "editor.codeActionsOnSave": {
-    "source.fixAll.eslint": "explicit"
-  },
-
-  // Terminal
-  "terminal.integrated.fontFamily": "'Hack Nerd Font'",
-  "terminal.integrated.persistentSessionReviveProcess": "onExitAndWindowClose",
-
-  // Python-specific overrides
-  "[python]": {
-    "editor.defaultFormatter": "charliermarsh.ruff",
-    "editor.tabSize": 4,
-    "editor.codeActionsOnSave": {
-      "source.organizeImports": "explicit",
-      "source.fixAll.ruff": "explicit"
+    # Settings content managed in configs/vscode-settings.json (single source of truth,
+    # consistent with configs/gruvbox.omp.json management pattern).
+    $configFile = Join-Path $PSScriptRoot "configs" "vscode-settings.json"
+    if (-not (Test-Path $configFile)) {
+        Write-Issue "configs/vscode-settings.json not found in $PSScriptRoot"
+        return
     }
-  },
-
-  // Python
-  "python.terminal.activateEnvironment": true,
-
-  // Linting
-  "pylint.enabled": true,
-  "mypy-type-checker.enabled": true,
-  "ruff.enabled": true,
-
-  // Files
-  "files.autoSave": "afterDelay",
-  "files.autoSaveDelay": 10000,
-  "files.trimTrailingWhitespace": true,
-  "files.exclude": {
-    "**/.env": true
-  },
-
-  // JS/TS
-  "js/ts.preferences.importModuleSpecifier": "relative",
-
-  // Theme
-  // Note: "Materal Dark Blue" is the correct name (the extension author misspelt "Material").
-  // This theme requires an extension installed via VS Code Settings Sync.
-  // If the theme is not available, VS Code falls back to the default. This is expected on
-  // fresh machines before Settings Sync activates.
-  "workbench.colorTheme": "Materal Dark Blue",
-  "workbench.iconTheme": "material-icon-theme"
-}
-'@
+    $content = Get-Content -Path $configFile -Raw
 
     Backup-FileIfExists $settingsPath
     Set-Content -Path $settingsPath -Value $content -Encoding UTF8

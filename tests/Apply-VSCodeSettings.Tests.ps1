@@ -3,6 +3,7 @@
 BeforeAll {
     . "$PSScriptRoot\..\Helpers.ps1"
     $script:ScriptContent = Get-Content "$PSScriptRoot\..\Apply-VSCodeSettings.ps1" -Raw
+    $script:ConfigPath = "$PSScriptRoot\..\configs\vscode-settings.json"
 }
 
 # ---------------------------------------------------------------------------
@@ -38,21 +39,15 @@ Describe 'Settings deployment' {
     }
 
     It 'written content is valid JSON with expected top-level keys' {
-        # Extract the settings JSON here-string from the script
-        $lines = $script:ScriptContent -split "`r?`n"
-        $inHereString = $false
-        $hereLines = @()
-        foreach ($l in $lines) {
-            if ($l -match "^\s*\`$content\s*=\s*@'") { $inHereString = $true; continue }
-            if ($inHereString -and $l -match "^'@") { break }
-            if ($inHereString) { $hereLines += $l }
-        }
-        $settingsJson = $hereLines -join "`n"
-        $settingsJson | Should -Not -BeNullOrEmpty
+        # Read settings from configs/vscode-settings.json (single source of truth)
+        Test-Path $script:ConfigPath | Should -BeTrue
+        $rawContent = Get-Content $script:ConfigPath -Raw
+        $rawContent | Should -Not -BeNullOrEmpty
 
         # Must parse as valid JSON (strip comments first -- JSON doesn't allow them
         # but VS Code settings.json does)
-        $cleanJson = ($hereLines | Where-Object { $_ -notmatch '^\s*//' }) -join "`n"
+        $lines = $rawContent -split "`r?`n"
+        $cleanJson = ($lines | Where-Object { $_ -notmatch '^\s*//' }) -join "`n"
         $parsed = $cleanJson | ConvertFrom-Json
         $parsed | Should -Not -BeNullOrEmpty
 
@@ -251,8 +246,12 @@ Describe 'Script structure' {
         $script:ScriptContent | Should -Match '\$env:APPDATA.*Code.*User'
     }
 
+    It 'reads settings from configs/vscode-settings.json' {
+        $script:ScriptContent | Should -Match 'vscode-settings\.json'
+        $script:ScriptContent | Should -Match 'Get-Content.*\$configFile'
+    }
+
     It 'calls Backup-FileIfExists before overwriting settings' {
-        # Verify backup is called before Set-Content in the settings function
         $script:ScriptContent | Should -Match 'Backup-FileIfExists\s+\$settingsPath'
     }
 
