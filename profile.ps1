@@ -405,6 +405,23 @@ function Show-DevEnvironment {
 
     Write-Host "`n  WINSETUP: $env:WINSETUP" -ForegroundColor DarkGray
     Write-Host "  PROFILE:  $PROFILE" -ForegroundColor DarkGray
-    Write-Host "  Python:   $(pyenv version 2>$null)" -ForegroundColor DarkGray
+
+    # pyenv outputs a multi-line instructional message when no global version
+    # is set. Capture and check before displaying.
+    $pyenvInfo = ''
+    if (Get-Command pyenv -ErrorAction SilentlyContinue) {
+        $pyenvOut = pyenv version 2>&1 | Select-Object -First 1
+        if ("$pyenvOut" -match 'no global\b|no local\b|not installed|not set') {
+            $pyenvInfo = 'not configured (run: pyenv global <version>)'
+        } elseif ($pyenvOut) {
+            $pyenvInfo = "$pyenvOut"
+        } else {
+            $pyenvInfo = 'unknown'
+        }
+    } else {
+        $pyenvOut = python --version 2>&1 | Select-Object -First 1
+        $pyenvInfo = if ($pyenvOut) { "$pyenvOut" } else { 'not found' }
+    }
+    Write-Host "  Python:   $pyenvInfo" -ForegroundColor DarkGray
     Write-Host ""
 }
