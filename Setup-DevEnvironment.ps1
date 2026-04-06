@@ -23,6 +23,11 @@
     Run only the profile health check and exit. Useful for verifying your profile
     has all expected sections without running the full setup.
 
+.PARAMETER WhatIf
+    Preview all setup steps without making changes. Each step reports whether it
+    would install/configure a tool or skip it (already present). No tools are
+    installed, no files are modified.
+
 .EXAMPLE
     .\Setup-DevEnvironment.ps1
     Run the standard setup (most common case).
@@ -30,6 +35,10 @@
 .EXAMPLE
     .\Setup-DevEnvironment.ps1 -IncludeOptional
     Run the standard setup plus optional sync-fallback steps.
+
+.EXAMPLE
+    .\Setup-DevEnvironment.ps1 -WhatIf
+    Preview what the standard setup would do without making changes.
 
 .EXAMPLE
     .\Setup-DevEnvironment.ps1 -ScaffoldPyproject "C:\Projects\my-app"
@@ -45,7 +54,9 @@ param(
 
     # Install a single named tool without running full setup.
     # Example: .\Setup-DevEnvironment.ps1 -InstallTool ruff
-    [string]$InstallTool
+    [string]$InstallTool,
+
+    [switch]$WhatIf
 )
 
 Set-StrictMode -Version Latest
@@ -991,6 +1002,116 @@ if ($CheckProfileOnly) {
     $TotalSteps = 1
     Test-ProfileHealth
     return
+}
+
+# Short-circuit: dry-run preview
+if ($WhatIf) {
+    Write-Host "`n=== Dry Run -- no changes will be made ===" -ForegroundColor Cyan
+    Write-Host "Previewing what Setup-DevEnvironment.ps1 would do.`n" -ForegroundColor DarkGray
+
+    $script:CurrentStep = 0
+    $TotalSteps = if ($IncludeOptional) { $CoreSteps + $OptionalSteps } else { $CoreSteps }
+    $wouldRun  = 0
+    $wouldSkip = 0
+
+    # Detection table -- each entry mirrors the check from the corresponding
+    # Install-*/Set-* function. Checks are read-only (Get-Command, Test-Path,
+    # git config queries). No tools are installed or files modified.
+    $dryRunSteps = @(
+        @{ Name = 'Profile Health Check'; Present = { Test-Path $PROFILE } }
+        @{ Name = 'Chocolatey';           Present = { [bool](Get-Command choco -ErrorAction SilentlyContinue) } }
+        @{ Name = 'VS Code';              Present = { [bool](Get-Command code -ErrorAction SilentlyContinue) } }
+        @{ Name = 'Python';               Present = {
+            $p = Get-Command python -ErrorAction SilentlyContinue
+            $p -and $p.Source -notlike '*WindowsApps*'
+        } }
+        @{ Name = 'Oh My Posh';           Present = { [bool](Get-Command oh-my-posh -ErrorAction SilentlyContinue) } }
+        @{ Name = 'GitHub CLI';           Present = { [bool](Get-Command gh -ErrorAction SilentlyContinue) } }
+        @{ Name = 'fzf + fd + PSFzf';     Present = {
+            (Get-Command fzf -ErrorAction SilentlyContinue) -and
+            (Get-Command fd -ErrorAction SilentlyContinue) -and
+            (Get-Module PSFzf -ListAvailable)
+        } }
+        @{ Name = 'CLI Tools (zoxide, bat, ripgrep, delta, lazygit)'; Present = {
+            (Get-Command zoxide -ErrorAction SilentlyContinue) -and
+            (Get-Command bat -ErrorAction SilentlyContinue) -and
+            (Get-Command rg -ErrorAction SilentlyContinue) -and
+            (Get-Command delta -ErrorAction SilentlyContinue) -and
+            (Get-Command lazygit -ErrorAction SilentlyContinue)
+        } }
+        @{ Name = 'Hack Nerd Font';       Present = {
+            [bool](Get-ChildItem 'C:\Windows\Fonts' -ErrorAction SilentlyContinue | Where-Object { $_.Name -like 'Hack*' })
+        } }
+        @{ Name = 'SSH Keys';             Present = { Test-Path (Join-Path $env:USERPROFILE '.ssh\id_ed25519') } }
+        @{ Name = 'GitHub SSH Key Upload'; Present = {
+            # Simplified: check that gh is available, key exists, and gh is authenticated
+            (Get-Command gh -ErrorAction SilentlyContinue) -and
+            (Test-Path (Join-Path $env:USERPROFILE '.ssh\id_ed25519.pub'))
+        } }
+        @{ Name = 'Windows Terminal Font'; Present = {
+            $wt = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
+            if (-not (Test-Path $wt)) { $false }
+            else {
+                try {
+                    $s = Get-Content $wt -Raw | ConvertFrom-Json
+                    $s.profiles.defaults.PSObject.Properties['font'] -and
+                    $s.profiles.defaults.font.face -eq 'Hack Nerd Font'
+                } catch { $false }
+            }
+        } }
+        @{ Name = 'Python Tools (pipx)';  Present = {
+            if (-not (Get-Command pipx -ErrorAction SilentlyContinue)) { $false }
+            else {
+                $installed = pipx list --short 2>$null | ForEach-Object { ($_ -split '\s+')[0].Trim().ToLower() }
+                $needed = @('pylint','mypy','ruff','bandit','pre-commit','cookiecutter')
+                -not ($needed | Where-Object { $installed -notcontains $_ })
+            }
+        } }
+        @{ Name = 'pyenv-win';            Present = { Test-Path (Join-Path $env:USERPROFILE '.pyenv') } }
+        @{ Name = 'Global .gitignore';    Present = { Test-Path (Join-Path $env:USERPROFILE '.gitignore_global') } }
+        @{ Name = 'Git Identity';         Present = {
+            $n = git config --global user.name 2>$null
+            $e = git config --global user.email 2>$null
+            $n -and $e
+        } }
+        @{ Name = 'Git Commit Signing (SSH)'; Present = { (git config --global gpg.format 2>$null) -eq 'ssh' } }
+        @{ Name = 'Delta Git Diff';       Present = { (git config --global core.pager 2>$null) -eq 'delta' } }
+    )
+
+    if ($IncludeOptional) {
+        $dryRunSteps += @(
+            @{ Name = 'VS Code Settings';           Present = { $false } }  # always deploys
+            @{ Name = 'VS Code Extensions';          Present = { $false } }  # always runs
+            @{ Name = 'PowerShell Profile';          Present = { $false } }  # always deploys
+            @{ Name = 'Windows Defender Exclusions';  Present = {
+                if (-not (Get-Command Get-MpPreference -ErrorAction SilentlyContinue)) { $false }
+                else {
+                    $existing = (Get-MpPreference).ExclusionPath
+                    $paths = @("$env:USERPROFILE\Projects","$env:USERPROFILE\.pyenv","$env:USERPROFILE\.local","$env:USERPROFILE\.venv")
+                    -not ($paths | Where-Object { $existing -notcontains $_ })
+                }
+            } }
+        )
+    }
+
+    foreach ($step in $dryRunSteps) {
+        Write-Step $step.Name
+        $present = try { & $step.Present } catch { $false }
+        if ($present) {
+            Write-Skip "$($step.Name) -- already present"
+            $wouldSkip++
+        } else {
+            Write-Host "  Would install/configure: $($step.Name)" -ForegroundColor Yellow
+            $wouldRun++
+        }
+    }
+
+    Write-Host "`n=== Dry Run Summary ===" -ForegroundColor Cyan
+    Write-Host "  Would run:  $wouldRun steps" -ForegroundColor Yellow
+    Write-Host "  Would skip: $wouldSkip steps (already present)" -ForegroundColor DarkGray
+    Write-Host "  Total:      $($wouldRun + $wouldSkip) steps" -ForegroundColor White
+    Write-Host "`nRun without -WhatIf to apply changes.`n" -ForegroundColor DarkGray
+    exit 0
 }
 
 # Short-circuit: install a single named tool
