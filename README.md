@@ -1,6 +1,6 @@
 # Windows Dev Environment Setup
 
-One script to set up a complete Windows 11 development environment. Safe to re-run -- skips anything already installed.
+One script to set up a complete Windows 11 development environment. Safe to re-run: skips anything already installed.
 
 > **Looking for the terminal UI?** [winTerface](https://github.com/megamatman/winTerface) provides a keyboard-driven TUI for managing your winSetup environment: install, update, and remove tools, check profile health, and run updates without memorising commands.
 
@@ -10,7 +10,7 @@ One script to set up a complete Windows 11 development environment. Safe to re-r
 - PowerShell 7+ (download from https://aka.ms/powershell if needed)
 - Administrator access (right-click Terminal > Run as Administrator)
 - `Hack.zip` in the repo directory (included in the repo)
-- `.ssh.zip` in the repo directory (you create this -- see [SSH Keys](#ssh-keys))
+- `.ssh.zip` in the repo directory (you create this; see [SSH Keys](#ssh-keys))
 
 ## Quick Start
 
@@ -180,7 +180,7 @@ Your project now has git, a virtual environment, linting config, pre-commit hook
 
 | When | What to do |
 |---|---|
-| Weekly | Nothing -- hooks run automatically on every commit |
+| Weekly | Nothing: hooks run automatically on every commit |
 | Monthly | Run `.\Update-DevEnvironment.ps1` (as Admin for Chocolatey) |
 | Per new project | Copy pre-commit config and run `pre-commit install` |
 | When joining a repo | Run `pre-commit install` after cloning |
@@ -226,7 +226,7 @@ Compress-Archive -Path "$env:USERPROFILE\.ssh\*" -DestinationPath ".ssh.zip"
 
    Press Enter to accept the default location (`~\.ssh\id_ed25519`). Add a passphrase if you want.
 
-2. Add the public key to GitHub -- copy the output and paste it at https://github.com/settings/ssh/new:
+2. Add the public key to GitHub. Copy the output and paste it at https://github.com/settings/ssh/new:
 
    ```powershell
    Get-Content "$env:USERPROFILE\.ssh\id_ed25519.pub"
@@ -253,9 +253,9 @@ The script defaults to `id_ed25519`. If you used a different type (e.g. `id_rsa`
 
 | Document | Contents |
 |---|---|
-| [QUICK-REFERENCE.md](QUICK-REFERENCE.md) | Single-page task navigator -- "I want to do X, where do I go?" |
+| [QUICK-REFERENCE.md](QUICK-REFERENCE.md) | Single-page task navigator: "I want to do X, where do I go?" |
 | [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | Symptom-first problem solving (40+ entries) |
-| `HowTo-Guides/` | Reference guides for every tool -- what it does, how to use it, real examples |
+| `HowTo-Guides/` | Reference guides for every tool: what it does, how to use it, real examples |
 | `Tutorials/` | Progressive tutorials from first terminal open to security hygiene |
 | `Cheatsheets/` | One-page quick-reference tables for every tool and capability |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to add tools, edit the profile, and contribute to this repo |

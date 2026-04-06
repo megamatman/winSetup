@@ -25,7 +25,7 @@ refreshenv
 
 ### Setup script fails at a specific step with a red error
 
-**Cause:** The script continues after failures and logs everything. Re-run it -- idempotency checks skip what already succeeded.
+**Cause:** The script continues after failures and logs everything. Re-run it; idempotency checks skip what already succeeded.
 
 **Fix:**
 ```powershell
@@ -271,7 +271,7 @@ Start-Service ssh-agent
 ssh-add ~\.ssh\id_ed25519
 ```
 
-### Delta is not rendering -- output looks like plain text
+### Delta is not rendering: output looks like plain text
 
 **Cause:** The terminal does not support the colour depth delta needs, or delta is not configured.
 
@@ -375,7 +375,7 @@ pipx reinstall-all
 
 **Cause:** pyenv's built-in update uses a VBScript with an ActiveX component unavailable on modern Windows 11.
 
-**Fix:** Use `Invoke-DevUpdate` or `.\Update-DevEnvironment.ps1` instead -- these use pip to update pyenv-win reliably. Do not run `pyenv update` directly.
+**Fix:** Use `Invoke-DevUpdate` or `.\Update-DevEnvironment.ps1` instead. These use pip to update pyenv-win reliably. Do not run `pyenv update` directly.
 
 ### pipx warns "Found a space in the pipx home path"
 
@@ -385,13 +385,13 @@ pipx reinstall-all
 
 **Fix:** Migrate pipx to a path without spaces. Run the following steps in a PS7 session:
 
-**Step 1** -- Set new pipx locations:
+**Step 1:** Set new pipx locations:
 ```powershell
 [System.Environment]::SetEnvironmentVariable('PIPX_HOME', 'C:\pipx', 'User')
 [System.Environment]::SetEnvironmentVariable('PIPX_BIN_DIR', 'C:\pipx\bin', 'User')
 ```
 
-**Step 2** -- Add `C:\pipx\bin` to User PATH before `.local\bin`:
+**Step 2:** Add `C:\pipx\bin` to User PATH before `.local\bin`:
 ```powershell
 $current = [System.Environment]::GetEnvironmentVariable('PATH', 'User') -split ';'
 $cleaned = $current | Where-Object { $_ -ne 'C:\pipx\bin' }
@@ -399,15 +399,15 @@ $reordered = @('C:\pipx\bin') + $cleaned
 [System.Environment]::SetEnvironmentVariable('PATH', ($reordered -join ';'), 'User')
 ```
 
-**Step 3** -- Restart your shell to pick up the new environment variables.
+**Step 3:** Restart your shell to pick up the new environment variables.
 
-**Step 4** -- Reinstall all pipx packages into the new location:
+**Step 4:** Reinstall all pipx packages into the new location:
 ```powershell
 @('ruff','mypy','pylint','bandit','pre-commit','cookiecutter') |
     ForEach-Object { pipx install $_ }
 ```
 
-**Step 5** -- Remove old stubs from `.local\bin`:
+**Step 5:** Remove old stubs from `.local\bin`:
 ```powershell
 @('ruff','mypy','dmypy','mypyc','stubgen','stubtest','pylint',
   'pylint-config','pyreverse','symilar','bandit','bandit-baseline',
@@ -418,6 +418,6 @@ $reordered = @('C:\pipx\bin') + $cleaned
 Remove-Item "$env:USERPROFILE\.local\share\man\man1\bandit.1" -ErrorAction SilentlyContinue
 ```
 
-**Step 6** -- Restart your shell and run `.\Update-DevEnvironment.ps1` to confirm no pipx warnings appear.
+**Step 6:** Restart your shell and run `.\Update-DevEnvironment.ps1` to confirm no pipx warnings appear.
 
-**Note:** The warning "Your profile path contains a space" from winSetup is a pre-flight check that will continue to appear -- this is informational and cannot be resolved without renaming your Windows user account. The pipx migration above resolves the functional issues it causes.
+**Note:** The warning "Your profile path contains a space" from winSetup is a pre-flight check that will continue to appear. This is informational and cannot be resolved without renaming your Windows user account. The pipx migration above resolves the functional issues it causes.

@@ -4,8 +4,8 @@
 
 | I want to... | Go to |
 |---|---|
-| Set up a fresh machine | [README.md -- Quick Start](README.md#quick-start) |
-| Understand what's installed | [README.md -- What Gets Installed](README.md#what-gets-installed) |
+| Set up a fresh machine | [README.md: Quick Start](README.md#quick-start) |
+| Understand what's installed | [README.md: What Gets Installed](README.md#what-gets-installed) |
 | Learn the tools | [Tutorials/01-getting-oriented.md](Tutorials/01-getting-oriented.md) |
 | Check everything is working | Run `Show-DevEnvironment` |
 | Verify my profile is complete | Run `Test-ProfileHealth` |
@@ -30,11 +30,11 @@
 
 | I want to... | Go to |
 |---|---|
-| Diagnose a setup problem | [TROUBLESHOOTING.md -- Setup](TROUBLESHOOTING.md#setup) |
-| Fix a terminal or profile issue | [TROUBLESHOOTING.md -- Terminal](TROUBLESHOOTING.md#terminal-and-profile) |
-| Fix a Python tooling issue | [TROUBLESHOOTING.md -- Python](TROUBLESHOOTING.md#python-and-tooling) |
-| Fix a git or signing issue | [TROUBLESHOOTING.md -- Git](TROUBLESHOOTING.md#git-and-signing) |
-| Fix a VS Code issue | [TROUBLESHOOTING.md -- VS Code](TROUBLESHOOTING.md#vs-code-integration) |
+| Diagnose a setup problem | [TROUBLESHOOTING.md: Setup](TROUBLESHOOTING.md#setup) |
+| Fix a terminal or profile issue | [TROUBLESHOOTING.md: Terminal](TROUBLESHOOTING.md#terminal-and-profile) |
+| Fix a Python tooling issue | [TROUBLESHOOTING.md: Python](TROUBLESHOOTING.md#python-and-tooling) |
+| Fix a git or signing issue | [TROUBLESHOOTING.md: Git](TROUBLESHOOTING.md#git-and-signing) |
+| Fix a VS Code issue | [TROUBLESHOOTING.md: VS Code](TROUBLESHOOTING.md#vs-code-integration) |
 
 ## Maintenance
 
@@ -54,7 +54,7 @@
 | Open a pull request from the terminal | [HowTo-Guides/12-team-collaboration.md](HowTo-Guides/12-team-collaboration.md) |
 | Review a colleague's PR locally | [HowTo-Guides/12-team-collaboration.md](HowTo-Guides/12-team-collaboration.md) |
 | Resolve a merge conflict | [HowTo-Guides/12-team-collaboration.md](HowTo-Guides/12-team-collaboration.md) |
-| Handle a rejected push | [TROUBLESHOOTING.md -- Git](TROUBLESHOOTING.md#git-and-signing) |
+| Handle a rejected push | [TROUBLESHOOTING.md: Git](TROUBLESHOOTING.md#git-and-signing) |
 | Understand signed commit requirements | [HowTo-Guides/10-security-hygiene.md](HowTo-Guides/10-security-hygiene.md) |
 
 ## I want to learn

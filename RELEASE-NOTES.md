@@ -1,4 +1,4 @@
-# Release Notes -- v1.0.0
+# Release Notes: v1.0.0
 
 Released: 2026-03-31
 
@@ -6,7 +6,7 @@ Released: 2026-03-31
 
 winSetup is a Windows 11 development environment setup tool for teams. One
 script installs and configures a complete Python and general development
-environment. Safe to re-run -- every step checks before acting.
+environment. Safe to re-run: every step checks before acting.
 
 ## What is installed
 
@@ -58,7 +58,7 @@ detect-private-key hook
 - PowerShell 7+
 - Administrator access to run `Setup-DevEnvironment.ps1`
 - `Hack.zip` in the repository directory (included)
-- `.ssh.zip` in the repository directory (you create this -- see README)
+- `.ssh.zip` in the repository directory (you create this; see README)
 
 ## Known limitations
 

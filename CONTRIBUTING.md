@@ -4,20 +4,20 @@
 
 | File | Purpose |
 |---|---|
-| `Setup-DevEnvironment.ps1` | Main setup orchestrator -- installs tools, configures git, deploys SSH keys |
+| `Setup-DevEnvironment.ps1` | Main setup orchestrator: installs tools, configures git, deploys SSH keys |
 | `Apply-VSCodeSettings.ps1` | Standalone VS Code settings and extension deployer |
 | `Apply-PowerShellProfile.ps1` | Deploys `profile.ps1` to `$PROFILE` |
 | `Update-DevEnvironment.ps1` | Updates all package managers and tools |
-| `Helpers.ps1` | Shared helper functions -- dot-sourced by all scripts |
+| `Helpers.ps1` | Shared helper functions, dot-sourced by all scripts |
 | `profile.ps1` | **Single source of truth** for the PowerShell profile |
 
 ## Adding a new tool
 
 To add a new tool to the setup, change these files in order:
 
-1. **`Setup-DevEnvironment.ps1`** -- add an install function (or add to `Install-CLITools`'s `$tools` array). Add the function call to the main execution block. Increment `$CoreSteps`.
-2. **`profile.ps1`** -- add any aliases, environment variables, or config. Add the tool to `Show-DevEnvironment`'s `$tools` hashtable. Add to `Test-ProfileHealth`'s `expectedSections` if the profile section is worth checking.
-3. **`README.md`** -- add a row to the "What Gets Installed" table.
+1. **`Setup-DevEnvironment.ps1`**: add an install function (or add to `Install-CLITools`'s `$tools` array). Add the function call to the main execution block. Increment `$CoreSteps`.
+2. **`profile.ps1`**: add any aliases, environment variables, or config. Add the tool to `Show-DevEnvironment`'s `$tools` hashtable. Add to `Test-ProfileHealth`'s `expectedSections` if the profile section is worth checking.
+3. **`README.md`**: add a row to the "What Gets Installed" table.
 
 If the tool is a pipx package, add it to the `$tools` array in `Setup-PythonTools` (in both `Setup-DevEnvironment.ps1` and `profile.ps1`).
 
@@ -40,13 +40,13 @@ If the tool is a pipx package, add it to the `$tools` array in `Setup-PythonTool
 ## Helpers.ps1 convention
 
 All shared output functions live in `Helpers.ps1`:
-- `Write-Change` -- green, something was installed or configured
-- `Write-Skip` -- grey, already present
-- `Write-Issue` -- red, something failed
-- `Write-Step` -- cyan, section header with step counter
-- `Backup-FileIfExists` -- backs up a file before overwriting
-- `Update-SessionPath` -- reloads PATH from the registry
-- `Write-Summary` -- prints installed/skipped/failed summary
+- `Write-Change`: green, something was installed or configured
+- `Write-Skip`: grey, already present
+- `Write-Issue`: red, something failed
+- `Write-Step`: cyan, section header with step counter
+- `Backup-FileIfExists`: backs up a file before overwriting
+- `Update-SessionPath`: reloads PATH from the registry
+- `Write-Summary`: prints installed/skipped/failed summary
 
 Every script dot-sources `Helpers.ps1` at the top: `. "$PSScriptRoot\Helpers.ps1"`
 
