@@ -282,20 +282,20 @@ function Update-SinglePackage {
 
     $key = $Name.ToLower()
     if (-not $PackageRegistry.ContainsKey($key)) {
-        Write-Host ""
-        Write-Host "  Unknown package '$Name'." -ForegroundColor Red
-        Write-Host ""
-        Write-Host "  Available packages:" -ForegroundColor DarkGray
+        Write-Output ""
+        Write-Output "  Unknown package '$Name'."
+        Write-Output ""
+        Write-Output "  Available packages:"
         $PackageRegistry.Keys | Sort-Object | ForEach-Object {
             $entry = $PackageRegistry[$_]
-            Write-Host ("    {0,-15} ({1})" -f $_, $entry.Manager) -ForegroundColor DarkGray
+            Write-Output ("    {0,-15} ({1})" -f $_, $entry.Manager)
         }
-        Write-Host ""
+        Write-Output ""
         exit 1
     }
 
     $entry = $PackageRegistry[$key]
-    Write-Host "`n  Updating $Name ($($entry.Manager))..." -ForegroundColor Cyan
+    Write-Output "`n  Updating $Name ($($entry.Manager))..."
 
     switch ($entry.Manager) {
         "choco" {
@@ -304,11 +304,11 @@ function Update-SinglePackage {
                 return
             }
             if (-not $isAdmin) {
-                Write-Host "  Chocolatey requires Administrator. Re-run as Administrator." -ForegroundColor Yellow
+                Write-Output "  Chocolatey requires Administrator. Re-run as Administrator."
                 return
             }
             $r = Invoke-ChocoUpdate -Id $entry.Id
-            Write-Host $r.Output
+            Write-Output $r.Output
             switch ($r.Status) {
                 'Updated'  { Write-Change "$Name updated" }
                 'UpToDate' { Write-Skip "$Name is already up to date" -Track $Name }
@@ -321,7 +321,7 @@ function Update-SinglePackage {
                 return
             }
             $r = Invoke-WingetUpdate -Id $entry.Id
-            Write-Host $r.Output
+            Write-Output $r.Output
             switch ($r.Status) {
                 'Updated'  { Write-Change "$Name updated" }
                 'UpToDate' { Write-Skip "$Name is already up to date" -Track $Name }
@@ -334,7 +334,7 @@ function Update-SinglePackage {
                 return
             }
             $r = Invoke-PipxUpdate -Id $entry.Id
-            Write-Host $r.Output
+            Write-Output $r.Output
             switch ($r.Status) {
                 'Updated'  { Write-Change "$Name updated" }
                 'UpToDate' { Write-Skip "$Name is already up to date" -Track $Name }
