@@ -56,6 +56,10 @@ param(
     # Example: .\Setup-DevEnvironment.ps1 -InstallTool ruff
     [string]$InstallTool,
 
+    # Which template subdirectory under ~/.wintemplates to use when
+    # -ScaffoldPyproject is specified. Default: python.
+    [string]$TemplateName = 'python',
+
     [switch]$WhatIf
 )
 
@@ -911,21 +915,56 @@ function Set-PowerShellProfile {
 function New-PyprojectToml {
     <#
     .SYNOPSIS
-        Scaffolds a pyproject.toml with default ruff and mypy settings.
+        Scaffolds a project from a template into the specified directory.
     .DESCRIPTION
-        Creates a minimal pyproject.toml in the specified directory with
-        ruff lint/format rules and mypy configuration. Skips if the file
-        already exists.
+        Checks ~/.wintemplates/<TemplateName> for a custom template first.
+        If found and non-empty, copies its contents into the target directory.
+        If not found or empty, falls back to the built-in pyproject.toml
+        template. Files that already exist in the target are skipped.
+        Variable substitution in custom templates is not yet supported;
+        files are copied as-is. Use cookiecutter for complex templating.
     .PARAMETER Path
-        Directory where the pyproject.toml should be created.
+        Directory where the template should be scaffolded.
+    .PARAMETER TemplateName
+        Subdirectory under ~/.wintemplates to use. Default: python.
     #>
-    param([string]$Path)
+    param(
+        [string]$Path,
+        [string]$TemplateName = 'python'
+    )
 
     if (-not (Test-Path $Path)) {
         Write-Issue "Directory not found: $Path"
         return
     }
 
+    # Check for a custom template
+    $customDir = Join-Path $env:USERPROFILE ".wintemplates" $TemplateName
+    if (Test-Path $customDir) {
+        $customFiles = @(Get-ChildItem -Path $customDir -Recurse -File)
+        if ($customFiles.Count -eq 0) {
+            Write-Issue "Custom template at $customDir is empty, falling back to built-in"
+        } else {
+            Write-Change "Using custom template from ~/.wintemplates/$TemplateName"
+            foreach ($file in $customFiles) {
+                $relativePath = $file.FullName.Substring($customDir.Length + 1)
+                $targetPath = Join-Path $Path $relativePath
+                $targetDir = Split-Path $targetPath -Parent
+                if (-not (Test-Path $targetDir)) {
+                    New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+                }
+                if (Test-Path $targetPath) {
+                    Write-Skip "$relativePath already exists"
+                } else {
+                    Copy-Item -Path $file.FullName -Destination $targetPath
+                    Write-Change "$relativePath created"
+                }
+            }
+            return
+        }
+    }
+
+    # Built-in template: pyproject.toml only (identical to original behaviour)
     $tomlPath = Join-Path $Path "pyproject.toml"
     if (Test-Path $tomlPath) {
         Write-Skip "pyproject.toml already exists in $Path"
@@ -1019,7 +1058,7 @@ function Test-ProfileHealth {
 
 # Short-circuit: pyproject scaffold
 if ($ScaffoldPyproject) {
-    New-PyprojectToml -Path $ScaffoldPyproject
+    New-PyprojectToml -Path $ScaffoldPyproject -TemplateName $TemplateName
     return
 }
 

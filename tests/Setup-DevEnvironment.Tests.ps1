@@ -352,3 +352,125 @@ Describe 'ScaffoldPyproject template' {
         $script:ScratchContent | Should -Match '# load_dotenv\(\)'
     }
 }
+
+Describe 'ScaffoldPyproject custom templates' {
+    BeforeAll {
+        Mock Write-Host {}
+        . "$PSScriptRoot\..\Helpers.ps1"
+
+        # Extract and evaluate New-PyprojectToml from the setup script
+        $funcBlock = [regex]::Match(
+            $script:SetupScript,
+            '(?ms)function New-PyprojectToml \{.*?\n\}'
+        )
+        $funcBlock.Success | Should -BeTrue
+        Invoke-Expression $funcBlock.Value
+    }
+
+    It 'copies files from custom template when present' {
+        $homeDir = Join-Path $TestDrive 'home-custom'
+        $customDir = Join-Path $homeDir '.wintemplates' 'python'
+        New-Item -ItemType Directory -Path $customDir -Force | Out-Null
+        Set-Content -Path (Join-Path $customDir 'pyproject.toml') -Value '[tool.ruff]'
+        Set-Content -Path (Join-Path $customDir 'setup.cfg') -Value '[metadata]'
+
+        $targetDir = Join-Path $TestDrive 'project-custom'
+        New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+
+        $savedProfile = $env:USERPROFILE
+        $env:USERPROFILE = $homeDir
+        try {
+            New-PyprojectToml -Path $targetDir -TemplateName 'python'
+        }
+        finally {
+            $env:USERPROFILE = $savedProfile
+        }
+
+        Test-Path (Join-Path $targetDir 'pyproject.toml') | Should -BeTrue
+        Test-Path (Join-Path $targetDir 'setup.cfg') | Should -BeTrue
+        Get-Content (Join-Path $targetDir 'pyproject.toml') -Raw | Should -Match '\[tool\.ruff\]'
+    }
+
+    It 'falls back to built-in when custom template not found' {
+        $targetDir = Join-Path $TestDrive 'project-fallback'
+        New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+
+        $savedProfile = $env:USERPROFILE
+        $env:USERPROFILE = Join-Path $TestDrive 'no-templates'
+        try {
+            New-PyprojectToml -Path $targetDir -TemplateName 'python'
+        }
+        finally {
+            $env:USERPROFILE = $savedProfile
+        }
+
+        $toml = Get-Content (Join-Path $targetDir 'pyproject.toml') -Raw
+        $toml | Should -Match 'line-length = 88'
+        $toml | Should -Match '\[tool\.mypy\]'
+    }
+
+    It 'falls back to built-in with warning when custom template is empty' {
+        $homeDir = Join-Path $TestDrive 'home-empty'
+        $customDir = Join-Path $homeDir '.wintemplates' 'python'
+        New-Item -ItemType Directory -Path $customDir -Force | Out-Null
+        # Directory exists but contains no files
+
+        $targetDir = Join-Path $TestDrive 'project-empty'
+        New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+
+        $savedProfile = $env:USERPROFILE
+        $env:USERPROFILE = $homeDir
+        try {
+            New-PyprojectToml -Path $targetDir -TemplateName 'python'
+        }
+        finally {
+            $env:USERPROFILE = $savedProfile
+        }
+
+        # Should fall back to built-in
+        $toml = Get-Content (Join-Path $targetDir 'pyproject.toml') -Raw
+        $toml | Should -Match 'line-length = 88'
+    }
+
+    It 'uses -TemplateName to select a different template subdirectory' {
+        $homeDir = Join-Path $TestDrive 'home-fastapi'
+        $customDir = Join-Path $homeDir '.wintemplates' 'fastapi'
+        New-Item -ItemType Directory -Path $customDir -Force | Out-Null
+        Set-Content -Path (Join-Path $customDir 'pyproject.toml') -Value '[tool.fastapi]'
+
+        $targetDir = Join-Path $TestDrive 'project-fastapi'
+        New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+
+        $savedProfile = $env:USERPROFILE
+        $env:USERPROFILE = $homeDir
+        try {
+            New-PyprojectToml -Path $targetDir -TemplateName 'fastapi'
+        }
+        finally {
+            $env:USERPROFILE = $savedProfile
+        }
+
+        Get-Content (Join-Path $targetDir 'pyproject.toml') -Raw | Should -Match '\[tool\.fastapi\]'
+    }
+
+    It 'built-in output is unchanged when no custom template exists' {
+        $targetDir = Join-Path $TestDrive 'project-builtin'
+        New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+
+        $savedProfile = $env:USERPROFILE
+        $env:USERPROFILE = Join-Path $TestDrive 'empty-home'
+        try {
+            New-PyprojectToml -Path $targetDir
+        }
+        finally {
+            $env:USERPROFILE = $savedProfile
+        }
+
+        $toml = Get-Content (Join-Path $targetDir 'pyproject.toml') -Raw
+        $toml | Should -Match '\[tool\.ruff\]'
+        $toml | Should -Match 'line-length = 88'
+        $toml | Should -Match '\[tool\.ruff\.lint\]'
+        $toml | Should -Match '\[tool\.ruff\.format\]'
+        $toml | Should -Match '\[tool\.mypy\]'
+    }
+}

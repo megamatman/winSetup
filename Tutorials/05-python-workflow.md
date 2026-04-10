@@ -65,6 +65,25 @@ Use the setup script's built-in scaffolding:
 
 This creates a `pyproject.toml` with Ruff and Mypy configuration.
 
+### Using a custom template
+
+If you prefer your own project structure, create a template directory at `~\.wintemplates\python\` and place your files inside it. When `-ScaffoldPyproject` runs, it checks this location first and copies all files into the target directory, preserving subdirectory structure. If the directory does not exist or is empty, the built-in template is used.
+
+```powershell
+# Create a custom template
+mkdir ~\.wintemplates\python
+Copy-Item your-pyproject.toml ~\.wintemplates\python\pyproject.toml
+```
+
+Use `-TemplateName` to maintain multiple templates:
+
+```powershell
+# Scaffold from a different template
+& "$env:WINSETUP\Setup-DevEnvironment.ps1" -ScaffoldPyproject "." -TemplateName "fastapi"
+```
+
+This uses `~\.wintemplates\fastapi\` instead. Files are copied as-is with no variable substitution. For complex templating with prompts and variables, use cookiecutter directly (`cookiecutter` is installed as part of the pipx tool set).
+
 ## Step 2: Write some code to lint
 
 Create a Python file with intentional issues so you can see each tool in action:
