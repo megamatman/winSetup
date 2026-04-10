@@ -552,6 +552,28 @@ function Set-WindowsTerminalFont {
     }
 }
 
+function Invoke-Pipx {
+    <#
+    .SYNOPSIS
+        Calls pipx with fallback to python -m pipx.
+    .DESCRIPTION
+        On some Windows configurations pipx.exe is a Python launcher script
+        rather than a native executable. Calling it with output redirection
+        fails with "StandardOutputEncoding is only supported when standard
+        output is redirected." This helper tries pipx directly first, then
+        retries via python -m pipx if the direct call throws.
+    #>
+    try {
+        $output = & pipx @args 2>&1
+        return $output
+    }
+    catch {
+        # Fallback: launcher script failure. Use python -m pipx instead.
+        $output = & python -m pipx @args 2>&1
+        return $output
+    }
+}
+
 function Install-PythonTools {
     <#
     .SYNOPSIS
@@ -595,14 +617,14 @@ function Install-PythonTools {
         Write-Skip "pipx is already installed" -Track "pipx"
     }
 
-    # Install missing tools
-    $installedPackages = pipx list --short 2>$null | ForEach-Object { ($_ -split "\s+")[0].Trim().ToLower() }
+    # Install missing tools (Invoke-Pipx handles launcher script fallback)
+    $installedPackages = Invoke-Pipx list --short 2>$null | ForEach-Object { ($_ -split "\s+")[0].Trim().ToLower() }
 
     foreach ($tool in $tools) {
         if ($installedPackages -contains $tool.ToLower()) {
             Write-Skip "$tool is already installed" -Track $tool
         } else {
-            $result = pipx install $tool 2>&1
+            $result = Invoke-Pipx install $tool 2>&1
             if ($LASTEXITCODE -ne 0) {
                 Write-Issue "$tool failed to install: $($result | Select-Object -Last 3 | Out-String)" -Track $tool
             } else {
@@ -612,7 +634,7 @@ function Install-PythonTools {
     }
 
     # Ensure PATH
-    $ensurepath = (pipx ensurepath 2>&1) -join " "
+    $ensurepath = (Invoke-Pipx ensurepath 2>&1) -join " "
     if ($ensurepath -notmatch "already in PATH") {
         Write-Change "PATH updated -- restart your terminal for changes to take effect"
     }

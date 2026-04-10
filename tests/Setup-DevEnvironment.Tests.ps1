@@ -194,6 +194,63 @@ Describe 'Assert-Administrator' {
     }
 }
 
+Describe 'Invoke-Pipx' {
+    BeforeAll {
+        Mock Write-Host {}
+        # Dot-source the function from the setup script by extracting and evaluating it
+        $funcBlock = [regex]::Match(
+            $script:SetupScript,
+            '(?ms)function Invoke-Pipx \{.*?\n\}'
+        )
+        $funcBlock.Success | Should -BeTrue
+        Invoke-Expression $funcBlock.Value
+    }
+
+    It 'falls back to python -m pipx when direct pipx throws' {
+        Mock pipx { throw [System.Management.Automation.RuntimeException]::new("StandardOutputEncoding error") }
+        Mock python { "ruff 0.4.0" } -ParameterFilter { $args[0] -eq '-m' -and $args[1] -eq 'pipx' }
+
+        $result = Invoke-Pipx list --short
+
+        Should -Invoke python -Times 1
+    }
+
+    It 'returns output from the successful direct path' {
+        Mock pipx { "ruff 0.4.0`nmypy 1.10.0" }
+        Mock python {}
+
+        $result = Invoke-Pipx list --short
+
+        $result | Should -Match 'ruff'
+        Should -Invoke python -Times 0
+    }
+
+    It 'is used by Install-PythonTools instead of direct pipx calls' {
+        # Verify the script text uses Invoke-Pipx, not bare pipx, in Install-PythonTools
+        $funcBody = [regex]::Match(
+            $script:SetupScript,
+            '(?ms)function Install-PythonTools \{.*?\n\}'
+        ).Value
+
+        # Should contain Invoke-Pipx calls
+        $funcBody | Should -Match 'Invoke-Pipx list'
+        $funcBody | Should -Match 'Invoke-Pipx install'
+        $funcBody | Should -Match 'Invoke-Pipx ensurepath'
+
+        # Executable pipx calls (lines starting with Invoke-Pipx or bare pipx as
+        # a command) should all go through Invoke-Pipx. Exclude comments, strings,
+        # and the pip-install-pipx line which installs pipx itself via pip.
+        $codeLines = ($funcBody -split "`n") |
+            Where-Object { $_ -notmatch '^\s*#' } |          # skip comments
+            Where-Object { $_ -notmatch 'Write-' } |         # skip output strings
+            Where-Object { $_ -notmatch 'pip install' } |    # skip pip install pipx
+            Where-Object { $_ -notmatch 'Get-Command pipx' } # skip pipx existence check
+
+        $bareLines = $codeLines | Where-Object { $_ -match '\bpipx\s+(list|install|ensurepath)\b' -and $_ -notmatch 'Invoke-Pipx' }
+        $bareLines | Should -BeNullOrEmpty
+    }
+}
+
 Describe 'Profile health check patterns' {
     BeforeAll {
         Mock Write-Host {}
