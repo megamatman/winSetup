@@ -265,7 +265,7 @@ The script defaults to `id_ed25519`. If you used a different type (e.g. `id_rsa`
 
 winSetup exposes a stable interface for consumers such as [winTerface](https://github.com/megamatman/winTerface). The full specification is in [INTERFACE.md](INTERFACE.md).
 
-**Current contract version: 1** (defined as `$script:ContractVersion` in `Setup-DevEnvironment.ps1`).
+**Current contract version: 2** (defined as `$script:ContractVersion` in `Setup-DevEnvironment.ps1`).
 
 The contract covers: `$PackageRegistry` format, `Install-*` function naming, `$CoreSteps` semantics, profile section comment patterns, and the `-InstallTool` parameter dispatch. See INTERFACE.md for what constitutes a breaking vs non-breaking change.
 
