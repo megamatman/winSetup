@@ -1,3 +1,85 @@
+# Release Notes: v1.1.0
+
+Released: 2026-04-10
+
+## Fixes
+
+- `Install-PythonTools` now uses `Invoke-Pipx` instead of calling pipx
+  directly. On some Windows configurations, pipx.exe is a Python launcher
+  script and fails with StandardOutputEncoding errors when called with
+  output redirection. `Invoke-Pipx` retries via `python -m pipx` when
+  the direct call throws. 3 call sites replaced.
+- `Uninstall-Tool.ps1` Step 2 uses the PowerShell AST parser to locate
+  `Install-*` function boundaries for removal. Replaces the previous
+  brace-counting approach, which miscounted braces inside string literals
+  and here-strings.
+- `Wait-VSCodeClosed` timeout now prompts with Y/N instead of hanging
+  indefinitely.
+- `-InstallTool` dispatch adds `-CommandType Function` to `Get-Command`
+  to avoid matching external executables.
+- `Setup-PythonTools` checks `$LASTEXITCODE` after each `pipx install`
+  and reports failures individually.
+
+## Features
+
+- `-WhatIf` dry-run mode on `Setup-DevEnvironment.ps1`. Previews all 18
+  core steps (plus 4 optional with `-IncludeOptional`) without making
+  changes. Each step uses the same detection logic as the real install.
+- `bootstrap.ps1` for one-line first-time installation. Handles PS7
+  check, git install via winget, repo clone, WINSETUP env var setup,
+  and optional hand-off to `Setup-DevEnvironment.ps1`. Runs without
+  admin. Security notice displayed before any action.
+- Custom project templates via `~/.wintemplates` with `-TemplateName`
+  parameter on `-ScaffoldPyproject`. Falls back to built-in template
+  when no custom template exists.
+- SHA256 checksums for all source and config files via
+  `New-Checksums.ps1`. `checksums.sha256` published as a release asset.
+
+## Refactoring
+
+- Per-manager update helpers (`Invoke-ChocoUpdate`, `Invoke-WingetUpdate`,
+  `Invoke-PipxUpdate`) extracted from `Update-SinglePackage` and
+  `Update-All` in `Update-DevEnvironment.ps1`.
+- VS Code settings moved from an embedded here-string in
+  `Apply-VSCodeSettings.ps1` to `configs/vscode-settings.json`.
+- `ScaffoldPyproject` template uses `os.environ.get()` patterns for
+  environment variable access. `load_dotenv` retained as commented-out
+  code for local development.
+
+## Documentation
+
+- `INTERFACE.md` introduced: versioned interface contract for consumers
+  (contract version 2 current). Covers `$PackageRegistry` format,
+  `Install-*` naming, `$CoreSteps` semantics, profile section comment
+  patterns, `-InstallTool` dispatch, and `$PROFILE` managed section
+  boundary with consumer extension contract.
+- README: "One-line install" section with `bootstrap.ps1` one-liner and
+  security notice. "Verifying files" section with `Get-FileHash`
+  instructions.
+- `QUICK-REFERENCE.md` updated with bootstrap, `-WhatIf`,
+  `-TemplateName`, and file verification entries.
+- `CONTRIBUTING.md` updated: `$PackageRegistry` step added to "adding a
+  new tool" guide, `Helpers.ps1` function list completed.
+- 12 HowTo-Guides, 11 Tutorials, 13 Cheatsheets published.
+
+## Tests
+
+166 Pester v5 tests across 9 files (up from 94 at v1.0.0):
+
+| File | Tests | Coverage |
+|------|------:|---------|
+| Setup-DevEnvironment.Tests.ps1 | 26 | $CoreSteps regression, -InstallTool dispatch, Assert-Administrator, Invoke-Pipx fallback, ScaffoldPyproject template, custom templates, profile health patterns |
+| Update-DevEnvironment.Tests.ps1 | 31 | Choco/winget/pipx output parsing, PSFzf module update, $PackageRegistry structure |
+| Uninstall-Tool.Tests.ps1 | 20 | AST function removal, $PackageRegistry regex parsing, profile line removal, backup, braces-in-strings |
+| Helpers.Tests.ps1 | 27 | Write-* functions, Backup-FileIfExists, Remove-OldBackups, Update-SessionPath merge |
+| Apply-PowerShellProfile.Tests.ps1 | 8 | Profile deployment, backup, theme verification |
+| Apply-VSCodeSettings.Tests.ps1 | 18 | Settings deployment, extension install, parameter switches, config file read |
+| Profile.Tests.ps1 | 13 | Setup-PythonTools pipx install/$LASTEXITCODE, Show-DevEnvironment |
+| Bootstrap.Tests.ps1 | 13 | Pre-flight checks, security notice, structure |
+| New-Checksums.Tests.ps1 | 10 | Output format, entry count, hash verification, exclusions |
+
+---
+
 # Release Notes: v1.0.0
 
 Released: 2026-04-06
