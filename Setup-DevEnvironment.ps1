@@ -65,7 +65,7 @@ Set-StrictMode -Version Latest
 # Interface contract version for consumers (see INTERFACE.md).
 # Increment when making breaking changes to $PackageRegistry format,
 # Install-* naming, $CoreSteps semantics, or -InstallTool dispatch.
-$script:ContractVersion = 1
+$script:ContractVersion = 2
 
 # Must match the number of Write-Step calls in core/optional functions respectively.
 # Update CoreSteps and OptionalSteps if functions are added or removed.

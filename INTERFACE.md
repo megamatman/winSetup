@@ -4,7 +4,7 @@ This document defines the stable interfaces that consumers of winSetup
 (primarily winTerface) depend on. Changes to any item documented here must
 be coordinated across both projects.
 
-**Contract version: 1**
+**Contract version: 2**
 
 Check the version programmatically via `$script:ContractVersion` defined
 near the top of `Setup-DevEnvironment.ps1`.
@@ -141,6 +141,59 @@ safely remove tool-specific lines beneath them.
 
 ---
 
+## $PROFILE managed section boundary
+
+`Apply-PowerShellProfile.ps1` deploys `profile.ps1` to `$PROFILE` by
+copying the file in full. The content of `profile.ps1` is the
+winSetup-managed section of `$PROFILE`. This is the authoritative
+boundary.
+
+### Consumer extensions
+
+Consumers may append content below the winSetup-managed section.
+This content is expected and managed by the consumer, not by winSetup.
+It is not drift.
+
+The known consumer extension is the winTerface launcher block, appended
+by `Install-WinTerface.ps1` (in the winTerface repository). The exact
+block is:
+
+```powershell
+# winTerface launcher
+function Invoke-WinTerface {
+    & "$env:WINTERFACE\winTerface.ps1" @args
+}
+Set-Alias wti Invoke-WinTerface
+```
+
+The block is identifiable by the `# winTerface launcher` comment header
+on its first line and terminates at the `Set-Alias wti Invoke-WinTerface`
+line.
+
+### Comparison contract
+
+Profile comparison and drift detection tools must treat the
+winSetup-managed section as the unit of comparison, not the full
+deployed `$PROFILE` file. Content appended below the managed section
+by consumers must be stripped before comparing against `profile.ps1`.
+
+winTerface implements this in `Remove-WinTerfaceLauncherBlock` in
+`src/Services/WinSetup.ps1`, which strips the launcher block using
+the comment header as the anchor.
+
+### Breaking changes to the launcher block
+
+The following changes require coordination between winSetup and
+winTerface (and increment the contract version):
+
+- Changing the `# winTerface launcher` comment header text.
+- Changing the `Set-Alias wti Invoke-WinTerface` line.
+- Changing the structure of the appended block in
+  `Install-WinTerface.ps1` without updating the stripping logic in
+  winTerface's `WinSetup.ps1`.
+
+---
+
 ## -InstallTool parameter
 
 `Setup-DevEnvironment.ps1` accepts a `-InstallTool <string>` parameter
@@ -174,6 +227,8 @@ wizard-added tools (not in the hardcoded table) to be installed.
 - Changing the profile section comment header format.
 - Removing or renaming the `-InstallTool` parameter.
 - Changing the `$CoreSteps` variable name or its decrement contract.
+- Changing the `$PROFILE` launcher block structure, comment header, or
+  `Set-Alias` line without updating the consumer stripping logic.
 
 ### Non-breaking changes (no version increment needed)
 
@@ -195,3 +250,4 @@ wizard-added tools (not in the hardcoded table) to be installed.
 | Version | Date | Changes |
 |---------|------|---------|
 | 1 | 2026-04-06 | Initial contract. Documents $PackageRegistry, Install-* naming, $CoreSteps, profile patterns, -InstallTool dispatch. |
+| 2 | 2026-04-10 | Adds $PROFILE managed section boundary, consumer extension pattern, launcher block comparison contract. |
