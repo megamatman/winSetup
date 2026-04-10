@@ -2,6 +2,15 @@
 
 BeforeAll {
     $script:ChecksumScript = Get-Content "$PSScriptRoot\..\New-Checksums.ps1" -Raw
+    $script:ChecksumFile   = "$PSScriptRoot\..\checksums.sha256"
+    $script:RepoRoot       = (Resolve-Path "$PSScriptRoot\..").Path
+
+    # Compute expected file list: tracked .ps1 + configs/*.json, minus tests/ and New-Checksums.ps1
+    $ps1Files    = @(& git -C $script:RepoRoot ls-files "*.ps1")
+    $configFiles = @(& git -C $script:RepoRoot ls-files "configs/*.json")
+    $script:ExpectedFiles = @(($ps1Files + $configFiles) | Where-Object {
+        $_ -notmatch '^tests/' -and $_ -ne 'New-Checksums.ps1'
+    } | Sort-Object)
 }
 
 Describe 'New-Checksums.ps1 structure' {
@@ -14,10 +23,8 @@ Describe 'New-Checksums.ps1 structure' {
         $script:ChecksumScript | Should -Not -Match 'Assert-Administrator'
     }
 
-    It 'computes SHA256 hashes for the three user-facing scripts' {
-        $script:ChecksumScript | Should -Match 'bootstrap\.ps1'
-        $script:ChecksumScript | Should -Match 'Setup-DevEnvironment\.ps1'
-        $script:ChecksumScript | Should -Match 'Install-WinTerface\.ps1'
+    It 'uses git ls-files to enumerate tracked files' {
+        $script:ChecksumScript | Should -Match 'git.*ls-files'
     }
 
     It 'uses Get-FileHash with SHA256 algorithm' {
@@ -26,43 +33,40 @@ Describe 'New-Checksums.ps1 structure' {
 }
 
 Describe 'checksums.sha256 output' {
-    BeforeAll {
-        $script:ChecksumFile = "$PSScriptRoot\..\checksums.sha256"
-    }
-
     It 'exists at the repo root' {
         Test-Path $script:ChecksumFile | Should -BeTrue
     }
 
-    It 'contains exactly 3 entries' {
+    It 'contains no test file entries' {
         $lines = @(Get-Content $script:ChecksumFile | Where-Object { $_ -ne '' })
-        $lines.Count | Should -Be 3
+        $testLines = $lines | Where-Object { $_ -match 'tests/' }
+        $testLines | Should -BeNullOrEmpty
     }
 
-    It 'each entry matches sha256sum format: 64 hex chars, two spaces, filename' {
+    It 'does not contain a New-Checksums.ps1 entry' {
+        $lines = @(Get-Content $script:ChecksumFile | Where-Object { $_ -ne '' })
+        $selfLines = $lines | Where-Object { $_ -match 'New-Checksums\.ps1' }
+        $selfLines | Should -BeNullOrEmpty
+    }
+
+    It 'each entry matches sha256sum format: 64 hex chars, two spaces, forward-slash path' {
         $lines = @(Get-Content $script:ChecksumFile | Where-Object { $_ -ne '' })
         foreach ($line in $lines) {
             $line | Should -Match '^[0-9a-f]{64}  \S+$'
         }
+        # Verify no backslashes in paths
+        $backslashLines = $lines | Where-Object { $_ -match '\\' }
+        $backslashLines | Should -BeNullOrEmpty
     }
 
-    It 'contains entries for bootstrap.ps1, Setup-DevEnvironment.ps1, and Install-WinTerface.ps1' {
-        $content = Get-Content $script:ChecksumFile -Raw
-        $content | Should -Match 'bootstrap\.ps1'
-        $content | Should -Match 'Setup-DevEnvironment\.ps1'
-        $content | Should -Match 'Install-WinTerface\.ps1'
+    It 'entry count matches the number of tracked non-test source and config files' {
+        $lines = @(Get-Content $script:ChecksumFile | Where-Object { $_ -ne '' })
+        $lines.Count | Should -Be $script:ExpectedFiles.Count
     }
 
-    It 'hash for bootstrap.ps1 matches Get-FileHash output' {
-        $expected = (Get-FileHash -Path "$PSScriptRoot\..\bootstrap.ps1" -Algorithm SHA256).Hash.ToLower()
-        $line = Get-Content $script:ChecksumFile | Where-Object { $_ -match 'bootstrap\.ps1' }
-        $fileHash = ($line -split '\s{2}')[0]
-        $fileHash | Should -Be $expected
-    }
-
-    It 'hash for Setup-DevEnvironment.ps1 matches Get-FileHash output' {
-        $expected = (Get-FileHash -Path "$PSScriptRoot\..\Setup-DevEnvironment.ps1" -Algorithm SHA256).Hash.ToLower()
-        $line = Get-Content $script:ChecksumFile | Where-Object { $_ -match 'Setup-DevEnvironment\.ps1' }
+    It 'hash for a sample file matches Get-FileHash output' {
+        $expected = (Get-FileHash -Path "$script:RepoRoot\Helpers.ps1" -Algorithm SHA256).Hash.ToLower()
+        $line = Get-Content $script:ChecksumFile | Where-Object { $_ -match 'Helpers\.ps1$' }
         $fileHash = ($line -split '\s{2}')[0]
         $fileHash | Should -Be $expected
     }

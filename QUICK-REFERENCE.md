@@ -65,7 +65,7 @@
 
 | I want to... | Go to |
 |---|---|
-| Verify a script before running it | `(Get-FileHash bootstrap.ps1 -Algorithm SHA256).Hash` then compare against `checksums.sha256` |
+| Verify a file before running it | `(Get-FileHash <file> -Algorithm SHA256).Hash` then compare against `checksums.sha256` |
 | Regenerate checksums before a release | Run `.\New-Checksums.ps1` |
 
 ## I want to learn

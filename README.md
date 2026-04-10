@@ -262,9 +262,9 @@ The script defaults to `id_ed25519`. If you used a different type (e.g. `id_rsa`
 | `$keyPath = Join-Path $sshDir "id_ed25519"` (in `Install-SSHKeys`) | Change `"id_ed25519"` to your key filename |
 | `$keyPath = Join-Path $env:USERPROFILE ".ssh\id_ed25519"` (in `profile.ps1`) | Change `"id_ed25519"` to your key filename |
 
-## Verifying scripts
+## Verifying files
 
-SHA256 checksums for `bootstrap.ps1`, `Setup-DevEnvironment.ps1`, and `Install-WinTerface.ps1` are published in `checksums.sha256`. To verify a script before running it:
+SHA256 checksums for all source and config files are published in `checksums.sha256`. To verify a file before running it:
 
 ```powershell
 (Get-FileHash bootstrap.ps1 -Algorithm SHA256).Hash
