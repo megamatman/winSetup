@@ -4,6 +4,16 @@ One script to set up a complete Windows 11 development environment. Safe to re-r
 
 > **Looking for the terminal UI?** [winTerface](https://github.com/megamatman/winTerface) provides a keyboard-driven TUI for managing your winSetup environment: install, update, and remove tools, check profile health, and run updates without memorising commands.
 
+## One-line install
+
+Open PowerShell 7 and run:
+
+```powershell
+irm "https://raw.githubusercontent.com/megamatman/winSetup/main/bootstrap.ps1" | iex
+```
+
+This installs git if needed, clones the repo, and walks you through setup. [Review the script](https://github.com/megamatman/winSetup/blob/main/bootstrap.ps1) before running. For the manual path, see [Prerequisites](#prerequisites) below.
+
 ## Prerequisites
 
 - Windows 11
