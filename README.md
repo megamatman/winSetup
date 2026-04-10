@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="winTerfacewinSetupLogo.png" alt="winSetup logo" />
+</p>
+
 # Windows Dev Environment Setup
 
 One script to set up a complete Windows 11 development environment. Safe to re-run: skips anything already installed.
