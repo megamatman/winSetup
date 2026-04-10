@@ -321,3 +321,34 @@ Describe 'Profile health check patterns' {
         'PYENV' | Should -Match $script:sections['pyenv-win']
     }
 }
+
+Describe 'ScaffoldPyproject template' {
+    BeforeAll {
+        $script:ScratchContent = Get-Content "$PSScriptRoot\..\templates\python-project\scratch.py" -Raw
+    }
+
+    It 'does not contain an active load_dotenv() call' {
+        # Active means uncommented -- lines starting with # are allowed
+        $activeLines = ($script:ScratchContent -split "`n") |
+            Where-Object { $_ -notmatch '^\s*#' } |
+            Where-Object { $_ -match 'load_dotenv\(\)' }
+        $activeLines | Should -BeNullOrEmpty
+    }
+
+    It 'does not contain an active from dotenv import' {
+        $activeLines = ($script:ScratchContent -split "`n") |
+            Where-Object { $_ -notmatch '^\s*#' } |
+            Where-Object { $_ -match 'from dotenv import' }
+        $activeLines | Should -BeNullOrEmpty
+    }
+
+    It 'contains os.environ.get patterns for environment variable access' {
+        $script:ScratchContent | Should -Match 'os\.environ\.get\('
+    }
+
+    It 'contains commented-out load_dotenv block with explanatory comment' {
+        $script:ScratchContent | Should -Match 'Load \.env file if present'
+        $script:ScratchContent | Should -Match '# from dotenv import load_dotenv'
+        $script:ScratchContent | Should -Match '# load_dotenv\(\)'
+    }
+}
