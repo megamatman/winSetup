@@ -19,15 +19,27 @@
     .\Update-DevEnvironment.ps1 -Package ruff
     Update only ruff via pipx.
 
+.PARAMETER NoWait
+    Skip the interactive Wait-VSCodeClosed prompt. Instead, if VS Code is
+    running, output a VSCODE_OPEN sentinel string and exit with code 0.
+    Intended for job-based invocation from winTerface where Read-Host and
+    Write-Host are not available.
+
 .EXAMPLE
     .\Update-DevEnvironment.ps1 -Package lazygit
     Update only lazygit via Chocolatey.
+
+.EXAMPLE
+    .\Update-DevEnvironment.ps1 -NoWait
+    Update all tools; exit immediately if VS Code is open.
 #>
 
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $false)]
-    [string]$Package
+    [string]$Package,
+
+    [switch]$NoWait
 )
 
 Set-StrictMode -Version Latest
@@ -80,7 +92,8 @@ function Wait-VSCodeClosed {
         VS Code extensions lock Python tool executables, causing pipx updates to fail.
         This function detects running VS Code instances and waits for the user to close
         them before allowing updates to proceed. Times out after 5 minutes and prompts
-        the user to continue or cancel.
+        the user to continue or cancel. Status messages use Write-Output so they are
+        visible in Receive-Job output when invoked from a background job.
     #>
     $vscodeProcessNames = @("Code", "Code - Insiders")
     $timeoutSeconds = 300   # 5 minutes
@@ -88,15 +101,15 @@ function Wait-VSCodeClosed {
     $running = Get-Process -Name $vscodeProcessNames -ErrorAction SilentlyContinue
     if (-not $running) { return }
 
-    Write-Host ""
-    Write-Host "  VS Code is currently running." -ForegroundColor Yellow
-    Write-Host ""
-    Write-Host "  Extensions such as Ruff and Pylint hold Python tool executables" -ForegroundColor Yellow
-    Write-Host "  open. This causes pipx updates to fail with 'Access is denied'." -ForegroundColor Yellow
-    Write-Host ""
-    Write-Host "  Please close VS Code, then updates will continue automatically." -ForegroundColor Yellow
-    Write-Host "  Timeout: $($timeoutSeconds / 60) minutes. Press Ctrl+C to cancel." -ForegroundColor DarkGray
-    Write-Host ""
+    Write-Output ""
+    Write-Output "  VS Code is currently running."
+    Write-Output ""
+    Write-Output "  Extensions such as Ruff and Pylint hold Python tool executables"
+    Write-Output "  open. This causes pipx updates to fail with 'Access is denied'."
+    Write-Output ""
+    Write-Output "  Please close VS Code, then updates will continue automatically."
+    Write-Output "  Timeout: $($timeoutSeconds / 60) minutes. Press Ctrl+C to cancel."
+    Write-Output ""
 
     $dots = 0
     $elapsed = 0
@@ -135,8 +148,8 @@ function Wait-VSCodeClosed {
         exit 0
     }
 
-    Write-Host "`r  VS Code closed. Proceeding with updates...          " -ForegroundColor Green
-    Write-Host ""
+    Write-Output "  VS Code closed. Proceeding with updates..."
+    Write-Output ""
 }
 
 # =============================================================================
@@ -494,7 +507,18 @@ if ($env:USERPROFILE -match ' ') {
     Write-Host ""
 }
 
-Wait-VSCodeClosed
+if ($NoWait) {
+    # Job-safe VS Code check: no Read-Host, no Write-Host, just a sentinel
+    # string that the caller (winTerface) can detect via Receive-Job.
+    $vscodeRunning = Get-Process -Name @("Code", "Code - Insiders") -ErrorAction SilentlyContinue
+    if ($vscodeRunning) {
+        Write-Output "VSCODE_OPEN: Close VS Code and retry the update."
+        Stop-Transcript
+        exit 0
+    }
+} else {
+    Wait-VSCodeClosed
+}
 
 try {
     if ($Package) {

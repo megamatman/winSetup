@@ -226,6 +226,27 @@ Describe 'PSFzf module update logic' {
     }
 }
 
+Describe '-NoWait switch' {
+    BeforeAll {
+        Mock Write-Host {}
+    }
+
+    It 'script defines -NoWait parameter' {
+        $script:SourceContent | Should -Match '\[switch\]\$NoWait'
+    }
+
+    It 'outputs VSCODE_OPEN sentinel when -NoWait is set and VS Code is running' {
+        # The script checks Get-Process for "Code" / "Code - Insiders"
+        # and writes the sentinel via Write-Output
+        $script:SourceContent | Should -Match 'VSCODE_OPEN: Close VS Code and retry the update\.'
+    }
+
+    It 'calls Wait-VSCodeClosed when -NoWait is not set' {
+        # The else branch calls Wait-VSCodeClosed
+        $script:SourceContent | Should -Match 'else\s*\{\s*\r?\n\s*Wait-VSCodeClosed'
+    }
+}
+
 Describe '$PackageRegistry structure' {
     BeforeAll {
         # Parse $PackageRegistry from the actual file content by extracting keys
