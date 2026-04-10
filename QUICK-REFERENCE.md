@@ -4,7 +4,9 @@
 
 | I want to... | Go to |
 |---|---|
-| Set up a fresh machine | [README.md: Quick Start](README.md#quick-start) |
+| Set up a fresh machine (one command) | [README.md: One-line install](README.md#one-line-install) |
+| Set up a fresh machine (manual) | [README.md: Quick Start](README.md#quick-start) |
+| Preview what setup would do | Run `.\Setup-DevEnvironment.ps1 -WhatIf` |
 | Understand what's installed | [README.md: What Gets Installed](README.md#what-gets-installed) |
 | Learn the tools | [Tutorials/01-getting-oriented.md](Tutorials/01-getting-oriented.md) |
 | Check everything is working | Run `Show-DevEnvironment` |
@@ -15,6 +17,8 @@
 | I want to... | Go to |
 |---|---|
 | Start a new Python project | [Tutorials/09-new-project-from-scratch.md](Tutorials/09-new-project-from-scratch.md) |
+| Scaffold a pyproject.toml | `.\Setup-DevEnvironment.ps1 -ScaffoldPyproject "."` |
+| Use a custom project template | `.\Setup-DevEnvironment.ps1 -ScaffoldPyproject "." -TemplateName "fastapi"` |
 | Jump to a directory | [Cheatsheets/cheatsheet-navigation-search.md](Cheatsheets/cheatsheet-navigation-search.md) (zoxide) |
 | Find a file by name | [Cheatsheets/cheatsheet-navigation-search.md](Cheatsheets/cheatsheet-navigation-search.md) (fd) |
 | Search inside files | [Cheatsheets/cheatsheet-navigation-search.md](Cheatsheets/cheatsheet-navigation-search.md) (rg) |

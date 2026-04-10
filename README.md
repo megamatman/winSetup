@@ -12,7 +12,7 @@ Open PowerShell 7 and run:
 irm "https://raw.githubusercontent.com/megamatman/winSetup/main/bootstrap.ps1" | iex
 ```
 
-This installs git if needed, clones the repo, and walks you through setup. [Review the script](https://github.com/megamatman/winSetup/blob/main/bootstrap.ps1) before running. For the manual path, see [Prerequisites](#prerequisites) below.
+The script prompts for confirmation before taking any action. It installs git if needed, clones the repo, and walks you through setup. [Review the script](https://github.com/megamatman/winSetup/blob/main/bootstrap.ps1) before running. For the manual path, see [Prerequisites](#prerequisites) below.
 
 ## Prerequisites
 
@@ -83,7 +83,8 @@ These are normally handled by VS Code Settings Sync (via GitHub) and OneDrive. U
 
 | Script | Purpose | Key flags |
 |---|---|---|
-| `Setup-DevEnvironment.ps1` | Full environment setup (requires Admin) | `-IncludeOptional`, `-CheckProfileOnly`, `-ScaffoldPyproject` |
+| `bootstrap.ps1` | One-line install for fresh machines (no admin needed) | `-InstallPath`, `-RunSetup` |
+| `Setup-DevEnvironment.ps1` | Full environment setup (requires Admin) | `-IncludeOptional`, `-CheckProfileOnly`, `-ScaffoldPyproject`, `-TemplateName`, `-WhatIf` |
 | `Apply-VSCodeSettings.ps1` | VS Code settings and extensions | `-SettingsOnly`, `-ExtensionsOnly` |
 | `Apply-PowerShellProfile.ps1` | Deploys `profile.ps1` to `$PROFILE` | none |
 | `Update-DevEnvironment.ps1` | Update all tools to latest versions | requires Admin for Chocolatey |
@@ -100,6 +101,9 @@ These are normally handled by VS Code Settings Sync (via GitHub) and OneDrive. U
 
 # Check profile completeness without making changes:
 .\Setup-DevEnvironment.ps1 -CheckProfileOnly
+
+# Preview what setup would do without making changes:
+.\Setup-DevEnvironment.ps1 -WhatIf
 
 # Scaffold a pyproject.toml into a project:
 .\Setup-DevEnvironment.ps1 -ScaffoldPyproject "~\Projects\my-app"
