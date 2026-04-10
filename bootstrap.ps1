@@ -54,7 +54,7 @@ Write-Host "    3. Set the WINSETUP environment variable"
 Write-Host "    4. Optionally run Setup-DevEnvironment.ps1"
 Write-Host ""
 Write-Host "  Review the source before running:" -ForegroundColor Yellow
-Write-Host "    https://github.com/megamatman/winSetup/blob/main/bootstrap.ps1"
+Write-Host "    https://github.com/megamatman/winSetup/blob/master/bootstrap.ps1"
 Write-Host ""
 
 $response = Read-Host "  Continue? [Y/n]"
