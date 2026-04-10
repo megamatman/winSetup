@@ -61,6 +61,13 @@
 | Handle a rejected push | [TROUBLESHOOTING.md: Git](TROUBLESHOOTING.md#git-and-signing) |
 | Understand signed commit requirements | [HowTo-Guides/10-security-hygiene.md](HowTo-Guides/10-security-hygiene.md) |
 
+## Security
+
+| I want to... | Go to |
+|---|---|
+| Verify a script before running it | `(Get-FileHash bootstrap.ps1 -Algorithm SHA256).Hash` then compare against `checksums.sha256` |
+| Regenerate checksums before a release | Run `.\New-Checksums.ps1` |
+
 ## I want to learn
 
 | I want to... | Go to |
