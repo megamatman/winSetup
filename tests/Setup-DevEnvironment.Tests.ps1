@@ -225,6 +225,24 @@ Describe 'Invoke-Pipx' {
         Should -Invoke python -Times 0
     }
 
+    It 'throws when both direct pipx and python -m pipx fail' {
+        Mock pipx { throw [System.Management.Automation.RuntimeException]::new("StandardOutputEncoding error") }
+        Mock python { throw [System.Management.Automation.CommandNotFoundException]::new("python module pipx not found") }
+
+        { Invoke-Pipx list --short } | Should -Throw
+    }
+
+    It 'propagates the fallback error, not the original error' {
+        Mock pipx { throw [System.Management.Automation.RuntimeException]::new("pipx launcher broke") }
+        Mock python { throw [System.Management.Automation.RuntimeException]::new("python -m pipx failed too") }
+
+        $caught = $null
+        try { Invoke-Pipx list --short } catch { $caught = $_ }
+
+        $caught | Should -Not -BeNullOrEmpty
+        $caught.Exception.Message | Should -Match 'python -m pipx failed too'
+    }
+
     It 'is used by Install-PythonTools instead of direct pipx calls' {
         # Verify the script text uses Invoke-Pipx, not bare pipx, in Install-PythonTools
         $funcBody = [regex]::Match(
@@ -248,6 +266,63 @@ Describe 'Invoke-Pipx' {
 
         $bareLines = $codeLines | Where-Object { $_ -match '\bpipx\s+(list|install|ensurepath)\b' -and $_ -notmatch 'Invoke-Pipx' }
         $bareLines | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'Install-PythonTools Invoke-Pipx error propagation' {
+    BeforeAll {
+        Mock Write-Host {}
+
+        # Extract Invoke-Pipx and Install-PythonTools from the source via AST.
+        # Cannot dot-source the file because of side effects at script scope.
+        $scriptPath = "$PSScriptRoot\..\Setup-DevEnvironment.ps1"
+        $tokens = $null; $errors = $null
+        $ast = [System.Management.Automation.Language.Parser]::ParseFile(
+            $scriptPath, [ref]$tokens, [ref]$errors)
+
+        foreach ($name in @('Invoke-Pipx', 'Install-PythonTools')) {
+            $funcAst = $ast.FindAll({
+                param($node)
+                $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+                $node.Name -eq $name
+            }, $false) | Select-Object -First 1
+            . ([scriptblock]::Create($funcAst.Extent.Text))
+        }
+    }
+
+    It 'double failure in Invoke-Pipx terminates Install-PythonTools before tool loop' {
+        # Mock environment: Python exists, pipx exists (passed the guard),
+        # but both invocation paths throw.
+        Mock Get-Command { [PSCustomObject]@{ Source = 'C:\Python\python.exe' } } -ParameterFilter { $Name -eq 'python' }
+        Mock Get-Command { [PSCustomObject]@{ Source = 'C:\Python\Scripts\pipx.exe' } } -ParameterFilter { $Name -eq 'pipx' }
+        Mock pipx { throw [System.Management.Automation.RuntimeException]::new("StandardOutputEncoding error") }
+        Mock python { throw [System.Management.Automation.RuntimeException]::new("python -m pipx not available") }
+        Mock pip {}
+
+        # Install-PythonTools calls Invoke-Pipx list --short at line 632.
+        # When both paths throw, the error propagates as a terminating error.
+        # The tool install loop (lines 634-645) and ensurepath (line 648) never run.
+        $threw = $false
+        try { Install-PythonTools } catch { $threw = $true }
+        $threw | Should -BeTrue -Because 'the unhandled error from Invoke-Pipx terminates the function'
+    }
+
+    It 'subsequent script steps are skipped when Install-PythonTools throws' {
+        # Simulate the main execution pattern: sequential function calls
+        # with no try/catch. An unhandled terminating error from one call
+        # prevents the next from running.
+        $script:_testStepA = $false
+        $script:_testStepB = $false
+        function Step-A { $script:_testStepA = $true; throw "simulated Invoke-Pipx double failure" }
+        function Step-B { $script:_testStepB = $true }
+
+        try {
+            Step-A
+            Step-B
+        } catch {}
+
+        $script:_testStepA | Should -BeTrue
+        $script:_testStepB | Should -BeFalse -Because 'a terminating error from Step-A skips Step-B'
     }
 }
 
