@@ -629,26 +629,38 @@ function Install-PythonTools {
     }
 
     # Install missing tools (Invoke-Pipx handles launcher script fallback)
-    $installedPackages = Invoke-Pipx list --short 2>$null | ForEach-Object { ($_ -split "\s+")[0].Trim().ToLower() }
+    $installedPackages = @()
+    try {
+        $installedPackages = Invoke-Pipx list --short 2>$null | ForEach-Object { ($_ -split "\s+")[0].Trim().ToLower() }
+    } catch {
+        Write-Issue "Could not query pipx package list: $($_.Exception.Message)" -Track "Python Tools"
+        return
+    }
 
     foreach ($tool in $tools) {
         if ($installedPackages -contains $tool.ToLower()) {
             Write-Skip "$tool is already installed" -Track $tool
         } else {
-            $result = Invoke-Pipx install $tool 2>&1
-            if ($LASTEXITCODE -ne 0) {
-                Write-Issue "$tool failed to install: $($result | Select-Object -Last 3 | Out-String)" -Track $tool
-            } else {
-                Write-Change "$tool installed" -Track $tool
+            try {
+                $result = Invoke-Pipx install $tool 2>&1
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Issue "$tool failed to install: $($result | Select-Object -Last 3 | Out-String)" -Track $tool
+                } else {
+                    Write-Change "$tool installed" -Track $tool
+                }
+            } catch {
+                Write-Issue "$tool failed to install: $($_.Exception.Message)" -Track $tool
             }
         }
     }
 
-    # Ensure PATH
-    $ensurepath = (Invoke-Pipx ensurepath 2>&1) -join " "
-    if ($ensurepath -notmatch "already in PATH") {
-        Write-Change "PATH updated -- restart your terminal for changes to take effect"
-    }
+    # Ensure PATH (best-effort, non-critical)
+    try {
+        $ensurepath = (Invoke-Pipx ensurepath 2>&1) -join " "
+        if ($ensurepath -notmatch "already in PATH") {
+            Write-Change "PATH updated -- restart your terminal for changes to take effect"
+        }
+    } catch {}
 }
 
 function Install-PyenvWin {

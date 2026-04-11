@@ -149,6 +149,21 @@ $env:WINSETUP = "path\to\winSetup"
 
 ## Python and tooling
 
+### Setup halts at step 13 with a raw Python error and no summary appears
+
+**Cause:** pipx is not accessible via direct invocation or `python -m pipx` on this machine. This can happen when pipx.exe is a broken Python launcher script and the pipx module is not installed in your Python environment.
+
+**Fix:** Install pipx manually, then re-run the setup script:
+```powershell
+pip install --user pipx
+pipx ensurepath
+```
+Restart your terminal, then:
+```powershell
+.\Setup-DevEnvironment.ps1
+```
+The script is idempotent and will skip steps that already completed successfully.
+
 ### A pipx tool is not found after install
 
 **Cause:** pipx's bin directory is not on PATH.

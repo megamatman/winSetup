@@ -269,7 +269,7 @@ Describe 'Invoke-Pipx' {
     }
 }
 
-Describe 'Install-PythonTools Invoke-Pipx error propagation' {
+Describe 'Install-PythonTools Invoke-Pipx error handling' {
     BeforeAll {
         Mock Write-Host {}
 
@@ -290,39 +290,93 @@ Describe 'Install-PythonTools Invoke-Pipx error propagation' {
         }
     }
 
-    It 'double failure in Invoke-Pipx terminates Install-PythonTools before tool loop' {
-        # Mock environment: Python exists, pipx exists (passed the guard),
-        # but both invocation paths throw.
+    BeforeEach {
+        # Initialise tracking lists that Write-Issue/-Change/-Skip append to.
+        # These are normally initialised by Setup-DevEnvironment.ps1 at script
+        # scope as List[string], but since we extracted the functions via AST
+        # we must set them. Must be List[string] because Helpers.ps1 uses .Add().
+        $script:Failed    = [System.Collections.Generic.List[string]]::new()
+        $script:Installed = [System.Collections.Generic.List[string]]::new()
+        $script:Skipped   = [System.Collections.Generic.List[string]]::new()
+        $script:CurrentStep = 0
+        $TotalSteps = 18
+    }
+
+    It 'returns normally when Invoke-Pipx list throws (double failure)' {
         Mock Get-Command { [PSCustomObject]@{ Source = 'C:\Python\python.exe' } } -ParameterFilter { $Name -eq 'python' }
         Mock Get-Command { [PSCustomObject]@{ Source = 'C:\Python\Scripts\pipx.exe' } } -ParameterFilter { $Name -eq 'pipx' }
         Mock pipx { throw [System.Management.Automation.RuntimeException]::new("StandardOutputEncoding error") }
         Mock python { throw [System.Management.Automation.RuntimeException]::new("python -m pipx not available") }
         Mock pip {}
 
-        # Install-PythonTools calls Invoke-Pipx list --short at line 632.
-        # When both paths throw, the error propagates as a terminating error.
-        # The tool install loop (lines 634-645) and ensurepath (line 648) never run.
-        $threw = $false
-        try { Install-PythonTools } catch { $threw = $true }
-        $threw | Should -BeTrue -Because 'the unhandled error from Invoke-Pipx terminates the function'
+        # Install-PythonTools should NOT throw. The try/catch around Invoke-Pipx
+        # list catches the error, logs it with Write-Issue, and returns.
+        { Install-PythonTools } | Should -Not -Throw
     }
 
-    It 'subsequent script steps are skipped when Install-PythonTools throws' {
-        # Simulate the main execution pattern: sequential function calls
-        # with no try/catch. An unhandled terminating error from one call
-        # prevents the next from running.
-        $script:_testStepA = $false
-        $script:_testStepB = $false
-        function Step-A { $script:_testStepA = $true; throw "simulated Invoke-Pipx double failure" }
-        function Step-B { $script:_testStepB = $true }
+    It 'calls Write-Issue when Invoke-Pipx list throws' {
+        Mock Get-Command { [PSCustomObject]@{ Source = 'C:\Python\python.exe' } } -ParameterFilter { $Name -eq 'python' }
+        Mock Get-Command { [PSCustomObject]@{ Source = 'C:\Python\Scripts\pipx.exe' } } -ParameterFilter { $Name -eq 'pipx' }
+        Mock pipx { throw [System.Management.Automation.RuntimeException]::new("StandardOutputEncoding error") }
+        Mock python { throw [System.Management.Automation.RuntimeException]::new("python -m pipx not available") }
+        Mock pip {}
 
-        try {
-            Step-A
-            Step-B
-        } catch {}
+        Install-PythonTools
 
-        $script:_testStepA | Should -BeTrue
-        $script:_testStepB | Should -BeFalse -Because 'a terminating error from Step-A skips Step-B'
+        # Write-Issue is defined in Helpers.ps1 which is dot-sourced in BeforeAll
+        # via the file-level BeforeAll. It should have been called with the
+        # "Python Tools" track for the pipx list failure.
+        $script:Failed | Should -Contain 'Python Tools'
+    }
+
+    It 'continues to the next tool when Invoke-Pipx install throws for one tool' {
+        Mock Get-Command { [PSCustomObject]@{ Source = 'C:\Python\python.exe' } } -ParameterFilter { $Name -eq 'python' }
+        Mock Get-Command { [PSCustomObject]@{ Source = 'C:\Python\Scripts\pipx.exe' } } -ParameterFilter { $Name -eq 'pipx' }
+        Mock pip {}
+        # Both pipx and python must throw for pylint to trigger the double
+        # failure that reaches Install-PythonTools's catch block. For other
+        # tools, pipx succeeds directly.
+        Mock pipx {
+            if ($args[0] -eq 'list') { return "" }
+            if ($args[0] -eq 'install') {
+                $script:_pipxInstallCallCount++
+                if ($args[1] -eq 'pylint') {
+                    throw [System.Management.Automation.RuntimeException]::new("install failed for pylint")
+                }
+                $global:LASTEXITCODE = 0
+                return "installed $($args[1])"
+            }
+            if ($args[0] -eq 'ensurepath') { return "already in PATH" }
+        }
+        Mock python {
+            # Fallback also fails for pylint (double failure)
+            if ($args -contains 'pylint') {
+                throw [System.Management.Automation.RuntimeException]::new("python -m pipx install pylint also failed")
+            }
+        }
+        $script:_pipxInstallCallCount = 0
+
+        { Install-PythonTools } | Should -Not -Throw
+
+        # pylint threw, but the loop should have continued to the remaining 5 tools
+        $script:_pipxInstallCallCount | Should -BeGreaterOrEqual 2 -Because 'the loop continues past the failing tool'
+        $script:Failed | Should -Contain 'pylint'
+    }
+
+    It 'allows Write-Summary to run after a double failure' {
+        # Simulate the fixed main execution pattern: Install-PythonTools
+        # returns normally, so Write-Summary runs.
+        $script:_testSummaryReached = $false
+        Mock Get-Command { [PSCustomObject]@{ Source = 'C:\Python\python.exe' } } -ParameterFilter { $Name -eq 'python' }
+        Mock Get-Command { [PSCustomObject]@{ Source = 'C:\Python\Scripts\pipx.exe' } } -ParameterFilter { $Name -eq 'pipx' }
+        Mock pipx { throw [System.Management.Automation.RuntimeException]::new("StandardOutputEncoding error") }
+        Mock python { throw [System.Management.Automation.RuntimeException]::new("python -m pipx not available") }
+        Mock pip {}
+
+        Install-PythonTools
+        $script:_testSummaryReached = $true
+
+        $script:_testSummaryReached | Should -BeTrue -Because 'Install-PythonTools returns normally so subsequent code runs'
     }
 }
 
