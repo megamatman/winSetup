@@ -113,7 +113,7 @@ if ($KeepFiles) {
                 }
                 choco uninstall $entry.Id -y
             }
-            'winget'  { winget uninstall $entry.Id --silent }
+            'winget'  { winget uninstall --id $entry.Id --exact --silent --disable-interactivity }
             'pipx'    { pipx uninstall $entry.Id }
             'module'  {
                 # Uninstall-Module is a PS cmdlet -- it does not set $LASTEXITCODE.

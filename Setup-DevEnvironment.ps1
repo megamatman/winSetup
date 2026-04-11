@@ -223,7 +223,7 @@ function Install-OhMyPosh {
     }
     if (-not (Assert-Winget)) { return }
     try {
-        winget install JanDeDobbeleer.OhMyPosh --silent --accept-package-agreements --accept-source-agreements
+        winget install --id JanDeDobbeleer.OhMyPosh --exact --silent --disable-interactivity --accept-package-agreements --accept-source-agreements
         if ($LASTEXITCODE -ne 0) { Write-Issue "Oh My Posh install failed (winget exit code: $LASTEXITCODE)" -Track "Oh My Posh"; return }
         Update-SessionPath
         Write-Change "Oh My Posh installed" -Track "Oh My Posh"
@@ -247,7 +247,7 @@ function Install-GitHubCLI {
     }
     if (-not (Assert-Winget)) { return }
     try {
-        winget install GitHub.cli --silent --accept-package-agreements --accept-source-agreements
+        winget install --id GitHub.cli --exact --silent --disable-interactivity --accept-package-agreements --accept-source-agreements
         if ($LASTEXITCODE -ne 0) { Write-Issue "GitHub CLI install failed (winget exit code: $LASTEXITCODE)" -Track "GitHub CLI"; return }
         Update-SessionPath
         if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
@@ -277,7 +277,7 @@ function Install-Fzf {
     } else {
         if (-not (Assert-Winget)) { return }
         try {
-            winget install junegunn.fzf --silent --accept-package-agreements --accept-source-agreements
+            winget install --id junegunn.fzf --exact --silent --disable-interactivity --accept-package-agreements --accept-source-agreements
             if ($LASTEXITCODE -ne 0) { Write-Issue "fzf install failed (winget exit code: $LASTEXITCODE)" -Track "fzf"; return }
             Update-SessionPath
             if (-not (Get-Command fzf -ErrorAction SilentlyContinue)) {

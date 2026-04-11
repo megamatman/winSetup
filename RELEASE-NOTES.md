@@ -64,14 +64,14 @@ Released: 2026-04-10
 
 ## Tests
 
-166 Pester v5 tests across 9 files (up from 94 at v1.0.0):
+177 Pester v5 tests across 9 files (up from 131 at v1.0.0):
 
 | File | Tests | Coverage |
 |------|------:|---------|
 | Setup-DevEnvironment.Tests.ps1 | 26 | $CoreSteps regression, -InstallTool dispatch, Assert-Administrator, Invoke-Pipx fallback, ScaffoldPyproject template, custom templates, profile health patterns |
-| Update-DevEnvironment.Tests.ps1 | 31 | Choco/winget/pipx output parsing, PSFzf module update, $PackageRegistry structure |
+| Update-DevEnvironment.Tests.ps1 | 34 | Choco/winget/pipx output parsing, PSFzf module update, $PackageRegistry structure, -NoWait switch |
 | Uninstall-Tool.Tests.ps1 | 20 | AST function removal, $PackageRegistry regex parsing, profile line removal, backup, braces-in-strings |
-| Helpers.Tests.ps1 | 27 | Write-* functions, Backup-FileIfExists, Remove-OldBackups, Update-SessionPath merge |
+| Helpers.Tests.ps1 | 35 | Write-* functions, JobMode dual-stream, Backup-FileIfExists, Remove-OldBackups, Update-SessionPath merge |
 | Apply-PowerShellProfile.Tests.ps1 | 8 | Profile deployment, backup, theme verification |
 | Apply-VSCodeSettings.Tests.ps1 | 18 | Settings deployment, extension install, parameter switches, config file read |
 | Profile.Tests.ps1 | 13 | Setup-PythonTools pipx install/$LASTEXITCODE, Show-DevEnvironment |

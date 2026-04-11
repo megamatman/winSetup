@@ -79,7 +79,7 @@ These are normally handled by VS Code Settings Sync (via GitHub) and OneDrive. U
 | Item | What it does |
 |---|---|
 | VS Code `settings.json` | Full replacement with standard config (backs up existing) |
-| VS Code extensions | Installs 15 extensions (Python, linting, Git, formatting) |
+| VS Code extensions | Installs 14 extensions (Python, linting, Git, formatting) |
 | PowerShell profile | Full replacement (backs up existing) |
 | Windows Defender exclusions | Excludes `~\Code`, `~\.pyenv`, `~\.local`, `~\.venv` from scanning |
 
