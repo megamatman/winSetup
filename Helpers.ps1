@@ -5,6 +5,10 @@
 # PATH management, and file backup. Do not define these functions elsewhere.
 # =============================================================================
 
+# When true, Write-Step/Change/Skip/Issue/Section emit Write-Output in
+# addition to Write-Host so output is visible via Receive-Job in job context.
+$script:JobMode = $false
+
 function Update-SessionPath {
     <#
     .SYNOPSIS
@@ -31,7 +35,9 @@ function Write-Step ($Name) {
         $TotalSteps. Used by Setup-DevEnvironment.ps1 to show progress.
     #>
     $script:CurrentStep++
-    Write-Host "`n[$script:CurrentStep/$TotalSteps] $Name" -ForegroundColor Cyan
+    $text = "`n[$script:CurrentStep/$TotalSteps] $Name"
+    Write-Host $text -ForegroundColor Cyan
+    if ($script:JobMode) { Write-Output $text }
 }
 
 function Write-Section ($Name) {
@@ -42,7 +48,9 @@ function Write-Section ($Name) {
         Displays a cyan section banner. Used by Update-DevEnvironment.ps1
         to separate output by package manager.
     #>
-    Write-Host "`n=== $Name ===" -ForegroundColor Cyan
+    $text = "`n=== $Name ==="
+    Write-Host $text -ForegroundColor Cyan
+    if ($script:JobMode) { Write-Output $text }
 }
 
 function Write-Skip ($Message, [string]$Track = "") {
@@ -55,6 +63,7 @@ function Write-Skip ($Message, [string]$Track = "") {
         is provided and the tracking variable exists.
     #>
     Write-Host "  $Message" -ForegroundColor DarkGray
+    if ($script:JobMode) { Write-Output "  $Message" }
     if ($Track -and (Get-Variable -Name "Skipped" -Scope Script -ErrorAction SilentlyContinue)) {
         $script:Skipped.Add($Track)
     }
@@ -70,6 +79,7 @@ function Write-Change ($Message, [string]$Track = "") {
         provided and the tracking variable exists.
     #>
     Write-Host "  $Message" -ForegroundColor Green
+    if ($script:JobMode) { Write-Output "  $Message" }
     if ($Track -and (Get-Variable -Name "Installed" -Scope Script -ErrorAction SilentlyContinue)) {
         $script:Installed.Add($Track)
     }
@@ -84,6 +94,7 @@ function Write-Issue ($Message, [string]$Track = "") {
         if -Track is provided and the tracking variable exists.
     #>
     Write-Host "  $Message" -ForegroundColor Red
+    if ($script:JobMode) { Write-Output "  $Message" }
     if ($Track -and (Get-Variable -Name "Failed" -Scope Script -ErrorAction SilentlyContinue)) {
         $script:Failed.Add($Track)
     }

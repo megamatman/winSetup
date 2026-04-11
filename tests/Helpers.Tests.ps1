@@ -331,3 +331,75 @@ Describe 'Remove-OldBackups' {
         { Remove-OldBackups -SourceFile $testFile -Keep 3 } | Should -Not -Throw
     }
 }
+
+Describe 'JobMode dual-stream output' {
+    BeforeEach {
+        Mock Write-Host {}
+        $script:CurrentStep = 0
+        $TotalSteps = 5
+    }
+
+    It 'Write-Step emits Write-Output when JobMode is true' {
+        $script:JobMode = $true
+        $result = Write-Step "Test step"
+        $result | Should -Match '\[1/5\] Test step'
+        $script:JobMode = $false
+    }
+
+    It 'Write-Change emits Write-Output when JobMode is true' {
+        $script:JobMode = $true
+        $result = Write-Change "something changed"
+        $result | Should -Be '  something changed'
+        $script:JobMode = $false
+    }
+
+    It 'Write-Skip emits Write-Output when JobMode is true' {
+        $script:JobMode = $true
+        $result = Write-Skip "already done"
+        $result | Should -Be '  already done'
+        $script:JobMode = $false
+    }
+
+    It 'Write-Issue emits Write-Output when JobMode is true' {
+        $script:JobMode = $true
+        $result = Write-Issue "something failed"
+        $result | Should -Be '  something failed'
+        $script:JobMode = $false
+    }
+
+    It 'Write-Section emits Write-Output when JobMode is true' {
+        $script:JobMode = $true
+        $result = Write-Section "Test section"
+        $result | Should -Match '=== Test section ==='
+        $script:JobMode = $false
+    }
+
+    It 'no Write-Output emitted when JobMode is false' {
+        $script:JobMode = $false
+        $result = Write-Step "Test step"
+        $result | Should -BeNullOrEmpty
+        $result = Write-Change "msg"
+        $result | Should -BeNullOrEmpty
+        $result = Write-Skip "msg"
+        $result | Should -BeNullOrEmpty
+        $result = Write-Issue "msg"
+        $result | Should -BeNullOrEmpty
+        $result = Write-Section "msg"
+        $result | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'JobMode parameter on scripts' {
+    BeforeAll {
+        $script:SetupContent  = Get-Content "$PSScriptRoot\..\Setup-DevEnvironment.ps1" -Raw
+        $script:UpdateContent = Get-Content "$PSScriptRoot\..\Update-DevEnvironment.ps1" -Raw
+    }
+
+    It 'Setup-DevEnvironment.ps1 defines -JobMode switch' {
+        $script:SetupContent | Should -Match '\[switch\]\$JobMode'
+    }
+
+    It 'Update-DevEnvironment.ps1 defines -JobMode switch' {
+        $script:UpdateContent | Should -Match '\[switch\]\$JobMode'
+    }
+}

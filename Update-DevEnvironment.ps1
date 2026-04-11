@@ -39,11 +39,18 @@ param(
     [Parameter(Mandatory = $false)]
     [string]$Package,
 
-    [switch]$NoWait
+    [switch]$NoWait,
+
+    # Enable dual-stream output for job context. When set, Write-Step,
+    # Write-Change, Write-Skip, Write-Issue, and Write-Section emit
+    # Write-Output in addition to Write-Host so output is visible via
+    # Receive-Job. No effect on script logic.
+    [switch]$JobMode
 )
 
 Set-StrictMode -Version Latest
 . "$PSScriptRoot\Helpers.ps1"
+if ($JobMode) { $script:JobMode = $true }
 
 # Transcript logging (matches Setup-DevEnvironment.ps1 and Uninstall-Tool.ps1)
 $logsDir = Join-Path $PSScriptRoot 'logs'
