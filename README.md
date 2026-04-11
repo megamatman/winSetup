@@ -13,7 +13,7 @@ One script to set up a complete Windows 11 development environment. Safe to re-r
 Open PowerShell 7 and run:
 
 ```powershell
-irm "https://raw.githubusercontent.com/megamatman/winSetup/refs/tags/v1.1.0/bootstrap.ps1" | iex
+irm "https://raw.githubusercontent.com/megamatman/winSetup/refs/tags/v1.2.0/bootstrap.ps1" | iex
 ```
 
 The script prompts for confirmation before taking any action. It installs git if needed, clones the repo, and walks you through setup. `bootstrap.ps1` runs without admin rights; `Setup-DevEnvironment.ps1` requests elevation when it runs. [Review the script](https://github.com/megamatman/winSetup/blob/master/bootstrap.ps1) before running. For the manual path, see [Prerequisites](#prerequisites) below.

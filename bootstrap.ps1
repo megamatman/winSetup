@@ -9,7 +9,7 @@
     rights. The full setup script requests elevation if needed.
 
     Usage:
-      irm "https://raw.githubusercontent.com/megamatman/winSetup/refs/tags/v1.1.0/bootstrap.ps1" | iex
+      irm "https://raw.githubusercontent.com/megamatman/winSetup/refs/tags/v1.2.0/bootstrap.ps1" | iex
 
     Or clone the repo first and run:
       .\bootstrap.ps1
