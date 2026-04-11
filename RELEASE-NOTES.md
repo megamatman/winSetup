@@ -1,3 +1,46 @@
+# Release Notes: v1.2.0
+
+Released: 2026-04-11
+
+## Fixes
+
+- All `winget install` and `winget uninstall` calls now use `--id`,
+  `--exact`, and `--disable-interactivity` consistently across
+  `Setup-DevEnvironment.ps1`, `bootstrap.ps1`, and `Uninstall-Tool.ps1`.
+  Prevents VT100 progress corruption in non-interactive contexts and
+  avoids partial name matching.
+- `Install-PythonTools` now handles `Invoke-Pipx` double failure
+  gracefully. All three `Invoke-Pipx` call sites are wrapped in try/catch
+  with Write-Issue logging. On failure the function returns normally,
+  allowing `Write-Summary` and `Stop-Transcript` to run and the user to
+  see which step failed.
+
+## Documentation
+
+- Stale counts corrected in `RELEASE-NOTES.md`, `README.md`, and
+  developer documentation: test totals, VS Code extension count, tutorial
+  range, troubleshooting entry count.
+- New `TROUBLESHOOTING.md` entry for the pipx double-failure symptom
+  (setup halts at step 13 with a raw Python error).
+
+## Tests
+
+217 Pester v5 tests across 9 files (up from 177 at v1.1.0):
+
+| File | Tests | Coverage |
+|------|------:|---------|
+| Setup-DevEnvironment.Tests.ps1 | 32 | $CoreSteps regression, -InstallTool dispatch, Assert-Administrator, Invoke-Pipx fallback and double failure, Install-PythonTools error handling, ScaffoldPyproject template, custom templates, profile health patterns |
+| Update-DevEnvironment.Tests.ps1 | 64 | Choco/winget/pipx output parsing, PSFzf module update, $PackageRegistry structure, -NoWait switch, VSCODE_OPEN sentinel (functional), direct Invoke-*Update helper tests covering all return states |
+| Uninstall-Tool.Tests.ps1 | 24 | AST function removal, $PackageRegistry regex parsing (all ID formats), profile line removal, backup, braces-in-strings |
+| Helpers.Tests.ps1 | 35 | Write-* functions, JobMode dual-stream, Backup-FileIfExists, Remove-OldBackups, Update-SessionPath merge |
+| Apply-PowerShellProfile.Tests.ps1 | 8 | Profile deployment, backup, theme verification |
+| Apply-VSCodeSettings.Tests.ps1 | 18 | Settings deployment, extension install, parameter switches, config file read |
+| Profile.Tests.ps1 | 13 | Setup-PythonTools pipx install/$LASTEXITCODE, Show-DevEnvironment |
+| Bootstrap.Tests.ps1 | 13 | Pre-flight checks, security notice, structure |
+| New-Checksums.Tests.ps1 | 10 | Output format, entry count, hash verification, exclusions |
+
+---
+
 # Release Notes: v1.1.0
 
 Released: 2026-04-10
