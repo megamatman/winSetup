@@ -446,6 +446,102 @@ $PackageRegistry = @{
         $PackageRegistry['fzf'].Id | Should -Be 'junegunn.fzf'
     }
 
+    It 'extracts hyphenated keys and IDs' {
+        $content = @'
+$PackageRegistry = @{
+    "pre-commit"  = @{ Manager = "pipx";   Id = "pre-commit" }
+    "pyenv"       = @{ Manager = "pyenv";  Id = "pyenv-win" }
+}
+'@
+        $PackageRegistry = @{}
+        $pattern = '"([^"]+)"\s*=\s*@\{\s*Manager\s*=\s*"([^"]+)";\s*Id\s*=\s*"([^"]+)"\s*\}'
+        $matches2 = [regex]::Matches($content, $pattern)
+        foreach ($m in $matches2) {
+            $PackageRegistry[$m.Groups[1].Value] = @{
+                Manager = $m.Groups[2].Value
+                Id      = $m.Groups[3].Value
+            }
+        }
+
+        $PackageRegistry.Count | Should -Be 2
+        $PackageRegistry['pre-commit'].Manager | Should -Be 'pipx'
+        $PackageRegistry['pre-commit'].Id | Should -Be 'pre-commit'
+        $PackageRegistry['pyenv'].Id | Should -Be 'pyenv-win'
+    }
+
+    It 'extracts publisher-prefixed IDs with mixed case' {
+        $content = @'
+$PackageRegistry = @{
+    "ohmyposh"    = @{ Manager = "winget"; Id = "JanDeDobbeleer.OhMyPosh" }
+    "gh"          = @{ Manager = "winget"; Id = "GitHub.cli" }
+}
+'@
+        $PackageRegistry = @{}
+        $pattern = '"([^"]+)"\s*=\s*@\{\s*Manager\s*=\s*"([^"]+)";\s*Id\s*=\s*"([^"]+)"\s*\}'
+        $matches2 = [regex]::Matches($content, $pattern)
+        foreach ($m in $matches2) {
+            $PackageRegistry[$m.Groups[1].Value] = @{
+                Manager = $m.Groups[2].Value
+                Id      = $m.Groups[3].Value
+            }
+        }
+
+        $PackageRegistry.Count | Should -Be 2
+        $PackageRegistry['ohmyposh'].Id | Should -Be 'JanDeDobbeleer.OhMyPosh'
+        $PackageRegistry['gh'].Id | Should -Be 'GitHub.cli'
+    }
+
+    It 'extracts module and special manager entries with mixed case IDs' {
+        $content = @'
+$PackageRegistry = @{
+    "psfzf"       = @{ Manager = "module"; Id = "PSFzf" }
+}
+'@
+        $PackageRegistry = @{}
+        $pattern = '"([^"]+)"\s*=\s*@\{\s*Manager\s*=\s*"([^"]+)";\s*Id\s*=\s*"([^"]+)"\s*\}'
+        $matches2 = [regex]::Matches($content, $pattern)
+        foreach ($m in $matches2) {
+            $PackageRegistry[$m.Groups[1].Value] = @{
+                Manager = $m.Groups[2].Value
+                Id      = $m.Groups[3].Value
+            }
+        }
+
+        $PackageRegistry.Count | Should -Be 1
+        $PackageRegistry['psfzf'].Manager | Should -Be 'module'
+        $PackageRegistry['psfzf'].Id | Should -Be 'PSFzf'
+    }
+
+    It 'parses the full actual registry from Update-DevEnvironment.ps1' {
+        # Read the actual registry content from disk to ensure the regex
+        # handles all real entries, not just curated fixtures.
+        $actualContent = Get-Content "$PSScriptRoot\..\Update-DevEnvironment.ps1" -Raw
+        $PackageRegistry = @{}
+        $pattern = '"([^"]+)"\s*=\s*@\{\s*Manager\s*=\s*"([^"]+)";\s*Id\s*=\s*"([^"]+)"\s*\}'
+        $matches2 = [regex]::Matches($actualContent, $pattern)
+        foreach ($m in $matches2) {
+            $PackageRegistry[$m.Groups[1].Value] = @{
+                Manager = $m.Groups[2].Value
+                Id      = $m.Groups[3].Value
+            }
+        }
+
+        # The actual registry has 20 entries
+        $PackageRegistry.Count | Should -BeGreaterOrEqual 20
+
+        # Spot-check representative formats
+        $PackageRegistry['pre-commit'].Id | Should -Be 'pre-commit'
+        $PackageRegistry['ohmyposh'].Id | Should -Be 'JanDeDobbeleer.OhMyPosh'
+        $PackageRegistry['pyenv'].Id | Should -Be 'pyenv-win'
+        $PackageRegistry['psfzf'].Id | Should -Be 'PSFzf'
+
+        # Every entry must have both Manager and Id
+        foreach ($key in $PackageRegistry.Keys) {
+            $PackageRegistry[$key].Manager | Should -Not -BeNullOrEmpty -Because "'$key' should have a Manager"
+            $PackageRegistry[$key].Id | Should -Not -BeNullOrEmpty -Because "'$key' should have an Id"
+        }
+    }
+
     It 'returns empty hashtable for content with no registry' {
         $content = '# no registry here'
         $PackageRegistry = @{}
