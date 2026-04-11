@@ -247,6 +247,79 @@ Describe '-NoWait switch' {
     }
 }
 
+Describe 'VSCODE_OPEN sentinel (functional)' {
+    BeforeAll {
+        $script:ScriptPath = (Resolve-Path "$PSScriptRoot\..\Update-DevEnvironment.ps1").Path
+        $escaped = $script:ScriptPath -replace "'", "''"
+    }
+
+    It 'emits the sentinel string when -NoWait is set and VS Code is running' {
+        # Run the script in a subprocess with a mock Get-Process that reports
+        # VS Code as running. The script should emit the sentinel and exit 0.
+        $output = pwsh -NoProfile -NonInteractive -Command "
+            function Get-Process {
+                param([string[]]`$Name, [System.Management.Automation.ActionPreference]`$ErrorAction = 'Continue')
+                if (`$Name -and (`$Name -contains 'Code' -or `$Name -contains 'Code - Insiders')) {
+                    return [PSCustomObject]@{ Name = 'Code'; Id = 99999 }
+                }
+                Microsoft.PowerShell.Management\Get-Process @PSBoundParameters
+            }
+            & '$escaped' -NoWait
+        " 2>&1
+
+        $global:LASTEXITCODE | Should -Be 0
+        ($output -join "`n") | Should -Match 'VSCODE_OPEN'
+    }
+
+    It 'does not emit the sentinel when -NoWait is set but VS Code is not running' {
+        # Mock Get-Process to return nothing for VS Code names.
+        # Pass -Package with a nonexistent name so the script exits quickly
+        # after the sentinel check (it prints "Unknown package" and exits 1).
+        $output = pwsh -NoProfile -NonInteractive -Command "
+            function Get-Process {
+                param([string[]]`$Name, [System.Management.Automation.ActionPreference]`$ErrorAction = 'Continue')
+                if (`$Name -and (`$Name -contains 'Code' -or `$Name -contains 'Code - Insiders')) {
+                    return `$null
+                }
+                Microsoft.PowerShell.Management\Get-Process @PSBoundParameters
+            }
+            & '$escaped' -NoWait -Package 'nonexistent_test_package'
+        " 2>&1
+
+        ($output -join "`n") | Should -Not -Match 'VSCODE_OPEN'
+    }
+
+    It 'exits with code 0 when the sentinel is emitted' {
+        $null = pwsh -NoProfile -NonInteractive -Command "
+            function Get-Process {
+                param([string[]]`$Name, [System.Management.Automation.ActionPreference]`$ErrorAction = 'Continue')
+                if (`$Name -and (`$Name -contains 'Code' -or `$Name -contains 'Code - Insiders')) {
+                    return [PSCustomObject]@{ Name = 'Code'; Id = 99999 }
+                }
+                Microsoft.PowerShell.Management\Get-Process @PSBoundParameters
+            }
+            & '$escaped' -NoWait
+        " 2>&1
+
+        $global:LASTEXITCODE | Should -Be 0
+    }
+
+    It 'sentinel output includes the expected message text' {
+        $output = pwsh -NoProfile -NonInteractive -Command "
+            function Get-Process {
+                param([string[]]`$Name, [System.Management.Automation.ActionPreference]`$ErrorAction = 'Continue')
+                if (`$Name -and (`$Name -contains 'Code' -or `$Name -contains 'Code - Insiders')) {
+                    return [PSCustomObject]@{ Name = 'Code'; Id = 99999 }
+                }
+                Microsoft.PowerShell.Management\Get-Process @PSBoundParameters
+            }
+            & '$escaped' -NoWait
+        " 2>&1
+
+        ($output -join "`n") | Should -Match 'VSCODE_OPEN: Close VS Code and retry the update\.'
+    }
+}
+
 Describe '$PackageRegistry structure' {
     BeforeAll {
         # Parse $PackageRegistry from the actual file content by extracting keys
